@@ -1,4 +1,5 @@
 import { WalletConnect } from "@/components/WalletConnect";
+import { CreatePollForm } from "@/components/CreatePollForm";
 
 export default function Home() {
   return (
@@ -8,15 +9,14 @@ export default function Home() {
         <WalletConnect />
       </header>
       
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
+      <div className="flex-1 max-w-2xl mx-auto w-full">
+        <div className="text-center mb-8">
           <p className="text-lg text-gray-600 dark:text-gray-400 mb-4">
             Decentralized polling platform with USDC rewards on Base
           </p>
-          <p className="text-sm text-gray-500">
-            Connect your wallet to get started
-          </p>
         </div>
+        
+        <CreatePollForm />
       </div>
     </main>
   );
