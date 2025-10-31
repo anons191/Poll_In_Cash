@@ -1,36 +1,171 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Poll in Cash
+
+A decentralized polling platform that rewards verified users in **USDC on Base** for completing polls. Built with Next.js, Thirdweb, Worldcoin World ID, and Firebase.
+
+## Overview
+
+Poll in Cash connects poll creators, participants, and data buyers through a trustless system using smart contracts, Worldcoin for ID verification, and Firebase for off-chain data handling.
+
+### Core Features
+
+- **Proof of Personhood**: Every participant verified via Worldcoin World ID
+- **Instant Rewards**: Smart contract disburses rewards immediately upon completion
+- **No PII Storage**: Personal info never stored in our database
+- **Fair Compensation**: Transparent reward logic, 10% platform fee
+- **Scalable + Trustless**: Thirdweb on Base handles all payouts and escrow
+
+## Tech Stack
+
+- **Frontend**: Next.js 14+ (App Router) + TypeScript
+- **Blockchain**: Thirdweb on Base (mainnet/testnet)
+- **Identity**: Worldcoin World ID (IDKit widget + verification API)
+- **Backend**: Firebase (Firestore, Storage, Functions)
+- **Smart Contracts**: PollEscrow.sol via Thirdweb Engine
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 20+
+- npm or yarn
+- Firebase CLI (install globally: `npm install -g firebase-tools`)
+- Firebase project (for backend services)
+- Thirdweb account (for blockchain integration)
+- Worldcoin API key (for identity verification)
+
+### Installation
+
+1. Clone the repository:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd poll-in-cash
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Set up environment variables:
+```bash
+cp .env.example .env.local
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Fill in your environment variables in `.env.local`:
+   - Get `NEXT_PUBLIC_THIRDWEB_CLIENT_ID` from [Thirdweb Dashboard](https://thirdweb.com/dashboard)
+   - Get `THIRDWEB_SECRET_KEY` from Thirdweb Dashboard
+   - Configure Firebase credentials from your Firebase project settings
+   - Get `WLD_API_KEY` from [Worldcoin Developer Portal](https://developer.worldcoin.org)
+   - Optional: Add `OPENAI_API_KEY` for receipt parsing
 
-## Learn More
+5. Run the development server:
+```bash
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+6. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+/src
+  /app              # Next.js App Router routes
+  /components        # React components
+    /ui             # shadcn/ui components (optional)
+  /lib              # Utility libraries
+    thirdweb.ts     # Thirdweb client configuration
+    contracts.ts    # Smart contract helpers
+    firebase.ts     # Firebase client SDK
+    firebaseAdmin.ts # Firebase admin SDK (server-only)
+    worldcoin.ts    # Worldcoin ID verification
+    ocr.ts          # OCR and receipt parsing
+  /types            # TypeScript type definitions
+/functions          # Firebase Cloud Functions
+/docs              # Project documentation
+```
 
-## Deploy on Vercel
+## Environment Variables
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+See `.env.example` for all required and optional environment variables.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Required for MVP
+- `NEXT_PUBLIC_THIRDWEB_CLIENT_ID`
+- `THIRDWEB_SECRET_KEY`
+- `NEXT_PUBLIC_CHAIN` (base or base-sepolia)
+- Firebase configuration variables
+- `WLD_API_KEY`
+
+### Optional
+- `OPENAI_API_KEY` (for receipt parsing)
+- `SENDGRID_API_KEY` / `TWILIO_API_KEY` (for notifications)
+
+## Development Workflow
+
+1. **Type Checking**: `npm run typecheck`
+2. **Linting**: `npm run lint`
+3. **Development Server**: `npm run dev`
+4. **Build**: `npm run build`
+5. **Start Production**: `npm start`
+
+## Firebase Functions
+
+Firebase Functions are located in the `/functions` directory.
+
+### Setup
+
+1. Install Firebase CLI globally (if not already installed):
+```bash
+npm install -g firebase-tools
+```
+
+2. Install function dependencies:
+```bash
+cd functions
+npm install
+```
+
+3. Initialize Firebase (if not already done):
+```bash
+firebase init functions
+```
+
+### Local Development
+
+```bash
+cd functions
+npm run dev    # Starts Firebase emulators
+# or
+npm run serve  # Alias for dev
+```
+
+Note: Make sure you have the Firebase CLI installed and your Firebase project initialized before running the dev server.
+
+### Deploy
+
+```bash
+cd functions
+npm run deploy
+```
+
+## Documentation
+
+- [Product Requirements Document](./docs/PRD_Poll_in_Cash.md)
+- [Agent Operations Guide](./docs/AGENT_OPERATIONS.md)
+- [Thirdweb Integration](./docs/Thirdweb-Agent.md)
+- [Firebase Patterns](./docs/Firebase-Agents.md)
+- [Worldcoin Integration](./docs/Worldcoin-Agent.md)
+
+## Security
+
+- Never commit `.env.local` files
+- Never expose `THIRDWEB_SECRET_KEY` to the client
+- All contract writes go through server-side Engine
+- No PII is stored in the database
+
+## License
+
+Private project - All rights reserved
+
+## Contact
+
+For questions or issues, contact the project owner.

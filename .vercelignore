@@ -1,0 +1,7 @@
+functions/
+node_modules/
+.next/
+.firebase/
+*.log
+.env.local
+.env*.local

@@ -1,16 +1,14 @@
 export default function Home() {
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Welcome</h2>
-      <p>
-        You’re looking at the Day 1 scaffold. Next steps: connect wallets (Thirdweb),
-        set up Stripe Identity, create polls, and handle instant payouts in USDC on Base.
-      </p>
-      <ol className="list-decimal ml-6 space-y-2 opacity-90">
-        <li>Fill .env.local with Firebase + Thirdweb client ID.</li>
-        <li>Run <code>npm run dev</code> and confirm the app loads.</li>
-        <li>Commit and push to GitHub.</li>
-      </ol>
-    </div>
+    <main className="flex min-h-screen flex-col items-center justify-center p-24">
+      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm">
+        <h1 className="text-4xl font-bold text-center mb-4">
+          Poll in Cash
+        </h1>
+        <p className="text-center text-lg text-gray-600 dark:text-gray-400">
+          Decentralized polling platform with USDC rewards on Base
+        </p>
+      </div>
+    </main>
   );
 }
