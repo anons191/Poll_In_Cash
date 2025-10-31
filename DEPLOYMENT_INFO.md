@@ -1,5 +1,21 @@
 # Deployment Information
 
+## PollEscrow Contract Deployment
+
+**Contract Address:** `0x52D535058Fc5757bf60A3a2F8AeB19039d3EbbFc`
+
+**Network:** Base Sepolia Testnet
+
+**Deployment Date:** October 31, 2025
+
+**Constructor Parameters:**
+- USDC Token: `0x036CbD53842c5426634e7929541eC2318f3dCF7e` ✅ (Correct address)
+- Platform Treasury: `0x5f71c75fc0af4423afbf3ed244db6dc9fe6e664b`
+
+**Explorer:** https://sepolia.basescan.org/address/0x52D535058Fc5757bf60A3a2F8AeB19039d3EbbFc
+
+---
+
 ## Current Deployments
 
 Your app is already deployed and live on Vercel:
