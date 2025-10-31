@@ -8,7 +8,7 @@ import { getPollEscrowAddress, usdcToBigInt, bigIntToUsdc } from "@/lib/contract
 import { pollEscrowABI } from "@/lib/pollEscrowABI";
 
 // USDC token address on Base Sepolia
-const USDC_ADDRESS = "0x081827b8C3Aa05287b5aA2bC3051fbE638F33152";
+const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
 
 // Minimal USDC ABI for approval
 const usdcABI = [

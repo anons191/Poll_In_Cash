@@ -7,7 +7,7 @@ echo "Deploying PollEscrow contract to Base Sepolia..."
 echo ""
 
 # Get environment variables
-USDC_TOKEN="0x081827b8C3Aa05287b5aA2bC3051fbE638F33152"
+USDC_TOKEN="0x036CbD53842c5426634e7929541eC2318f3dCF7e"
 PLATFORM_TREASURY="0x5f71c75fc0af4423afbf3ed244db6dc9fe6e664b"
 SECRET_KEY=$(grep "THIRDWEB_SECRET_KEY" ../.env.local | cut -d '=' -f2)
 
