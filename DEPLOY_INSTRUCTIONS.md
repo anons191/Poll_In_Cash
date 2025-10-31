@@ -46,6 +46,14 @@ The contract compiled successfully. Now we need to deploy it via Thirdweb Dashbo
 6. Enter constructor parameters
 7. Deploy and copy address
 
+## ✅ Contract Deployed!
+
+**Contract Address:** `0x7BdD71539087DB1cbf724651Cf2451fd64a7b113`
+
+Environment variables have been updated:
+- ✅ `.env.local` updated
+- ✅ Vercel environment variables added
+
 ## After Deployment
 
 1. **Verify Contract (Optional):**
