@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useActiveAccount, useReadContract, useSendTransaction } from "thirdweb/react";
 import { prepareContractCall, waitForReceipt } from "thirdweb";
 import { client, chain } from "@/lib/thirdweb";
-import { getPollEscrowAddress, usdcToBigInt } from "@/lib/contracts";
+import { getPollEscrowAddress, usdcToBigInt, bigIntToUsdc } from "@/lib/contracts";
 import { pollEscrowABI } from "@/lib/pollEscrowABI";
 
 // USDC token address on Base Sepolia
@@ -129,9 +129,30 @@ export function CreatePollForm() {
     setStatus(null);
 
     try {
+      // Validate contract address is set
+      if (!escrowAddress) {
+        setStatus({ 
+          type: "error", 
+          message: "Contract address not configured. Please set NEXT_PUBLIC_POLL_ESCROW_CONTRACT_ADDRESS" 
+        });
+        setIsLoading(false);
+        return;
+      }
+
       const rewardPoolAmount = usdcToBigInt(parseFloat(rewardPool));
       const rewardPerUserAmount = usdcToBigInt(parseFloat(rewardPerUser));
       const maxCompletionsNum = BigInt(maxCompletions);
+
+      // Verify allowance is sufficient
+      const currentAllowance = allowanceBigInt;
+      if (currentAllowance < rewardPoolAmount) {
+        setStatus({ 
+          type: "error", 
+          message: `Insufficient allowance. Current: ${bigIntToUsdc(currentAllowance).toFixed(2)} USDC, Required: ${rewardPool} USDC. Please approve again.` 
+        });
+        setIsLoading(false);
+        return;
+      }
 
       const escrowContract = {
         client,
@@ -161,8 +182,20 @@ export function CreatePollForm() {
             setMaxCompletions("");
             setIsLoading(false);
           },
-          onError: (error) => {
-            setStatus({ type: "error", message: `Failed to create poll: ${error.message}` });
+          onError: (error: any) => {
+            let errorMessage = error.message || "Unknown error";
+            
+            // Check for specific contract errors
+            if (errorMessage.includes("SafeERC20FailedOperation")) {
+              errorMessage = "USDC transfer failed. Please check your USDC balance and approval amount.";
+            } else if (errorMessage.includes("InsufficientFunds")) {
+              errorMessage = "Insufficient USDC balance. Please ensure you have enough USDC.";
+            } else if (errorMessage.includes("e450d38c")) {
+              // This is likely SafeERC20FailedOperation or ERC20 transfer error
+              errorMessage = "USDC transfer failed. Please verify:\n1. You have sufficient USDC balance\n2. Your approval amount is correct\n3. You're connected to Base Sepolia";
+            }
+            
+            setStatus({ type: "error", message: `Failed to create poll: ${errorMessage}` });
             setIsLoading(false);
           },
         }

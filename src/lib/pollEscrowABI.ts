@@ -1,10 +1,80 @@
 /**
  * PollEscrow Contract ABI
  * Generated from contracts/PollEscrow.sol
- * This will be updated after contract deployment with the actual ABI
+ * Includes all functions, events, and error definitions
  */
 
 export const pollEscrowABI = [
+  // ============ Errors ============
+  {
+    inputs: [],
+    name: "InsufficientFunds",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "InvalidPoll",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "NullifierHashAlreadyUsed",
+    type: "error",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "owner",
+        type: "address",
+      },
+    ],
+    name: "OwnableInvalidOwner",
+    type: "error",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "account",
+        type: "address",
+      },
+    ],
+    name: "OwnableUnauthorizedAccount",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "PollExceededMaxCompletions",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "PollNotActive",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "ReentrancyGuardReentrantCall",
+    type: "error",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "token",
+        type: "address",
+      },
+    ],
+    name: "SafeERC20FailedOperation",
+    type: "error",
+  },
+  {
+    inputs: [],
+    name: "TransferFailed",
+    type: "error",
+  },
+  // ============ Functions ============
   {
     inputs: [
       { internalType: "uint256", name: "_rewardPool", type: "uint256" },
