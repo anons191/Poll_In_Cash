@@ -44,7 +44,7 @@ export function CreatePollForm() {
 
   const escrowAddress = getPollEscrowAddress();
 
-  // Check USDC allowance
+  // Check USDC allowance with polling enabled
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     contract: {
       client,
@@ -54,6 +54,10 @@ export function CreatePollForm() {
     },
     method: "allowance",
     params: account ? [account.address, escrowAddress as `0x${string}`] : ["" as `0x${string}`, "" as `0x${string}`],
+    queryOptions: {
+      refetchInterval: 3000, // Poll every 3 seconds (optional, helps catch updates faster)
+      enabled: !!account, // Only fetch when account is connected
+    },
   });
 
   const { mutate: sendTransaction } = useSendTransaction();
@@ -90,9 +94,13 @@ export function CreatePollForm() {
         {
           onSuccess: async (result) => {
             const receipt = await waitForReceipt({ client, chain, transactionHash: result.transactionHash });
-            setStatus({ type: "success", message: "USDC approved successfully!" });
-            refetchAllowance();
-            setIsLoading(false);
+            setStatus({ type: "success", message: "USDC approved successfully! Refreshing allowance..." });
+            
+            // Wait 2 seconds for RPC nodes to index, then refetch
+            setTimeout(async () => {
+              await refetchAllowance();
+              setIsLoading(false);
+            }, 2000);
           },
           onError: (error) => {
             setStatus({ type: "error", message: `Approval failed: ${error.message}` });
