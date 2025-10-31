@@ -44,6 +44,21 @@ export function CreatePollForm() {
 
   const escrowAddress = getPollEscrowAddress();
 
+  // Verify the contract's USDC token address matches our frontend USDC address
+  const { data: contractUsdcAddress } = useReadContract({
+    contract: {
+      client,
+      chain,
+      address: escrowAddress as `0x${string}`,
+      abi: pollEscrowABI as any,
+    },
+    method: "usdcToken",
+    params: [],
+    queryOptions: {
+      enabled: !!escrowAddress,
+    },
+  });
+
   // Check USDC allowance with polling enabled
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     contract: {
@@ -142,6 +157,16 @@ export function CreatePollForm() {
       const rewardPoolAmount = usdcToBigInt(parseFloat(rewardPool));
       const rewardPerUserAmount = usdcToBigInt(parseFloat(rewardPerUser));
       const maxCompletionsNum = BigInt(maxCompletions);
+
+      // Verify contract USDC address matches frontend USDC address
+      if (contractUsdcAddress && contractUsdcAddress.toLowerCase() !== USDC_ADDRESS.toLowerCase()) {
+        setStatus({ 
+          type: "error", 
+          message: `USDC address mismatch! Contract expects ${contractUsdcAddress} but frontend is using ${USDC_ADDRESS}. Please redeploy the contract with the correct USDC address (0x036CbD53842c5426634e7929541eC2318f3dCF7e).` 
+        });
+        setIsLoading(false);
+        return;
+      }
 
       // Verify allowance is sufficient
       const currentAllowance = allowanceBigInt;
@@ -274,6 +299,28 @@ export function CreatePollForm() {
           </p>
         </div>
 
+        {contractUsdcAddress && (
+          <div className="text-sm mb-4">
+            {contractUsdcAddress.toLowerCase() !== USDC_ADDRESS.toLowerCase() ? (
+              <div className="p-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200">
+                <p className="font-semibold">⚠️ USDC Address Mismatch!</p>
+                <p className="mt-1">
+                  Contract expects USDC: <code className="text-xs">{contractUsdcAddress}</code>
+                </p>
+                <p className="mt-1">
+                  Frontend using USDC: <code className="text-xs">{USDC_ADDRESS}</code>
+                </p>
+                <p className="mt-2">
+                  <strong>Solution:</strong> Redeploy the PollEscrow contract with the new USDC address, or use the old USDC token address.
+                </p>
+              </div>
+            ) : (
+              <div className="text-xs text-green-600 dark:text-green-400">
+                ✓ Contract USDC address matches ({USDC_ADDRESS.slice(0, 6)}...{USDC_ADDRESS.slice(-4)})
+              </div>
+            )}
+          </div>
+        )}
         {allowance !== undefined && (
           <div className="text-sm text-gray-600 dark:text-gray-400">
             <p>
