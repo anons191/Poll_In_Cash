@@ -1,0 +1,12 @@
+{
+  "name": "poll-escrow-contracts",
+  "version": "1.0.0",
+  "description": "PollEscrow smart contract for Poll in Cash",
+  "scripts": {
+    "compile": "forge build",
+    "test": "forge test"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0"
+  }
+}

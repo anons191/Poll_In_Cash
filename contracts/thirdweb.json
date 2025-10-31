@@ -1,0 +1,9 @@
+{
+  "name": "PollEscrow",
+  "displayName": "PollEscrow Contract",
+  "framework": "hardhat",
+  "compiler": {
+    "version": "0.8.20"
+  }
+}
+
