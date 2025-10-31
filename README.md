@@ -107,6 +107,28 @@ See `.env.example` for all required and optional environment variables.
 4. **Build**: `npm run build`
 5. **Start Production**: `npm start`
 
+## Deployment
+
+### Staging Deployment (Vercel)
+
+The project is configured for Vercel deployment. To deploy:
+
+1. **Connect to Vercel:**
+   ```bash
+   npx vercel
+   ```
+   Or connect your GitHub repo directly at [vercel.com](https://vercel.com)
+
+2. **Set Environment Variables:**
+   Add all required environment variables from `.env.example` in Vercel's project settings.
+
+3. **Deploy:**
+   Vercel will automatically deploy on every push to `main` branch.
+
+### CI/CD
+
+GitHub Actions are configured to run lint and typecheck on every push and pull request. See `.github/workflows/ci.yml` for details.
+
 ## Firebase Functions
 
 Firebase Functions are located in the `/functions` directory.
