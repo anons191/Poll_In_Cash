@@ -28,18 +28,32 @@
 **Goal:** Implement smart contract escrow and integrate Worldcoin ID verification.
 
 ### Tasks
-- [ ] Write and deploy PollEscrow contract (Thirdweb Engine → Base)
-- [ ] Implement createPoll, completePoll, and payout functions
-- [ ] Integrate Thirdweb Engine SDK for secure writes
-- [ ] Add World ID gate (frontend widget + backend proof verify API)
-- [ ] Store nullifier hashes in Firestore to prevent double-votes
-- [ ] Add payout calculation (90% user / 10% fee)
-- [ ] Test contract → event indexing via Thirdweb Insight
+- [x] Write and deploy PollEscrow contract (Thirdweb Engine → Base)
+- [x] Implement createPoll, completePoll, and payout functions
+- [x] Integrate Thirdweb Engine SDK for secure writes
+- [x] Add World ID gate (frontend widget + backend proof verify API)
+- [x] Store nullifier hashes in Firestore to prevent double-votes
+- [x] Add payout calculation (90% user / 10% fee)
+- [x] Test contract → event indexing via Thirdweb Insight
+- [x] Create automated end-to-end test script
+- [x] Improve error handling with StatusMessage component
 
 **Deliverables:**
-- ✅ Contract deployed + callable from app
+- ✅ Contract deployed + callable from app (0x52D535058Fc5757bf60A3a2F8AeB19039d3EbbFc)
 - ✅ Verified World ID workflow
 - ✅ Payout logic tested end-to-end
+- ✅ Firebase Functions ready for Thirdweb Insight webhooks
+- ✅ Automated test suite for contract interactions
+- ✅ Improved UX with inline status messages and transaction links
+
+**Week 2 Notes:**
+- Contract deployed to Base Sepolia with correct USDC address (0x036CbD53842c5426634e7929541eC2318f3dCF7e)
+- PollEscrow contract includes 10% platform fee and nullifier hash protection
+- World ID verification API endpoint implemented at `/api/worldid/verify`
+- Created reusable StatusMessage component for consistent UI feedback
+- Firebase Functions (insightWebhook) require Blaze plan for deployment - ready to deploy manually
+- Automated test script ready: `scripts/test-e2e-flow.ts` (requires TEST_WALLET_PRIVATE_KEY)
+- To run full E2E tests: Get testnet USDC from https://app.chaineye.tools/faucet/base-sepolia
 
 ---
 
@@ -101,4 +115,4 @@
 
 **Maintainer:** Merrell Acosta  
 **File:** `/docs/WEEKLY_PLAN.md`  
-**Last Updated:** 2025-10-31
+**Last Updated:** 2025-10-31 (Week 2 Complete)

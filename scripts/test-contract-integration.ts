@@ -115,11 +115,11 @@ async function testContractIntegration() {
         params: [1n],
       });
       console.log(`   ✅ Poll 1 Info:`);
-      console.log(`      Creator: ${pollInfo.creator}`);
-      console.log(`      Reward Pool: ${pollInfo.rewardPool}`);
-      console.log(`      Reward Per User: ${pollInfo.rewardPerUser}`);
-      console.log(`      Completed: ${pollInfo.completedCount}/${pollInfo.maxCompletions}`);
-      console.log(`      Active: ${pollInfo.isActive}\n`);
+      console.log(`      Creator: ${pollInfo[0]}`);
+      console.log(`      Reward Pool: ${pollInfo[1]}`);
+      console.log(`      Reward Per User: ${pollInfo[2]}`);
+      console.log(`      Completed: ${pollInfo[3]}/${pollInfo[4]}`);
+      console.log(`      Active: ${pollInfo[5]}\n`);
     } else {
       console.log(`   ℹ️  No polls created yet (counter: ${pollCounter})\n`);
     }

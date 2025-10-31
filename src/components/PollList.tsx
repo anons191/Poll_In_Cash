@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { collection, query, orderBy, getDocs, type Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useActiveAccount } from "thirdweb/react";
@@ -12,6 +12,7 @@ import { client, chain } from "@/lib/thirdweb";
 import { pollEscrowABI } from "@/lib/pollEscrowABI";
 import { hasWalletVerified } from "@/lib/firestoreHelpers";
 import type { WorldIDProof } from "@/lib/worldcoin";
+import { StatusMessage } from "./ui/StatusMessage";
 
 interface PollData {
   id: string;
@@ -32,18 +33,13 @@ export function PollList() {
   const [error, setError] = useState<string | null>(null);
   const [verifyingPollId, setVerifyingPollId] = useState<string | null>(null);
   const [hasVerified, setHasVerified] = useState<Record<string, boolean>>({});
+  const [pollStatuses, setPollStatuses] = useState<Record<string, {
+    type: "success" | "error" | "info";
+    message: string;
+    transactionHash?: string;
+  } | null>>({});
   
   const { mutate: sendTransaction } = useSendTransaction();
-
-  useEffect(() => {
-    loadPolls();
-  }, []);
-
-  useEffect(() => {
-    if (account && polls.length > 0) {
-      checkVerifications();
-    }
-  }, [account, polls]);
 
   const loadPolls = async () => {
     try {
@@ -69,7 +65,7 @@ export function PollList() {
     }
   };
 
-  const checkVerifications = async () => {
+  const checkVerifications = useCallback(async () => {
     if (!account) return;
     
     const verificationStatus: Record<string, boolean> = {};
@@ -82,7 +78,17 @@ export function PollList() {
       }
     }
     setHasVerified(verificationStatus);
-  };
+  }, [account, polls]);
+
+  useEffect(() => {
+    loadPolls();
+  }, []);
+
+  useEffect(() => {
+    if (account && polls.length > 0) {
+      checkVerifications();
+    }
+  }, [account, polls, checkVerifications]);
 
   const handleVerificationSuccess = async (pollId: string, proof: WorldIDProof) => {
     if (!account) return;
@@ -112,20 +118,63 @@ export function PollList() {
         completePollTx,
         {
           onSuccess: async (result) => {
-            const receipt = await waitForReceipt({ client, chain, transactionHash: result.transactionHash });
-            alert(`Poll completed! Transaction: ${result.transactionHash}`);
-            setHasVerified(prev => ({ ...prev, [pollId]: true }));
-            await loadPolls(); // Refresh poll data
-            setVerifyingPollId(null);
+            try {
+              const receipt = await waitForReceipt({ client, chain, transactionHash: result.transactionHash });
+              setPollStatuses(prev => ({
+                ...prev,
+                [pollId]: {
+                  type: "success",
+                  message: "Poll completed successfully! You will receive your USDC reward shortly.",
+                  transactionHash: result.transactionHash,
+                },
+              }));
+              setHasVerified(prev => ({ ...prev, [pollId]: true }));
+              await loadPolls(); // Refresh poll data
+              setVerifyingPollId(null);
+            } catch (receiptError: any) {
+              setPollStatuses(prev => ({
+                ...prev,
+                [pollId]: {
+                  type: "error",
+                  message: `Transaction sent but receipt error: ${receiptError.message}`,
+                },
+              }));
+              setVerifyingPollId(null);
+            }
           },
-          onError: (error) => {
-            alert(`Failed to complete poll: ${error.message}`);
+          onError: (error: any) => {
+            let errorMessage = "Failed to complete poll";
+            
+            // Provide more helpful error messages
+            if (error.message.includes("NullifierHashAlreadyUsed")) {
+              errorMessage = "This World ID has already been used for this poll";
+            } else if (error.message.includes("PollExceededMaxCompletions")) {
+              errorMessage = "This poll has reached its maximum number of completions";
+            } else if (error.message.includes("PollNotActive")) {
+              errorMessage = "This poll is no longer active";
+            } else if (error.message) {
+              errorMessage = `Failed to complete poll: ${error.message}`;
+            }
+            
+            setPollStatuses(prev => ({
+              ...prev,
+              [pollId]: {
+                type: "error",
+                message: errorMessage,
+              },
+            }));
             setVerifyingPollId(null);
           },
         }
       );
     } catch (error: any) {
-      alert(`Error: ${error.message}`);
+      setPollStatuses(prev => ({
+        ...prev,
+        [pollId]: {
+          type: "error",
+          message: `Error preparing transaction: ${error.message}`,
+        },
+      }));
       setVerifyingPollId(null);
     }
   };
@@ -202,6 +251,16 @@ export function PollList() {
               </div>
             </div>
 
+            {pollStatuses[poll.poll_id] && (
+              <div className="mb-4">
+                <StatusMessage
+                  type={pollStatuses[poll.poll_id]!.type}
+                  message={pollStatuses[poll.poll_id]!.message}
+                  transactionHash={pollStatuses[poll.poll_id]!.transactionHash}
+                />
+              </div>
+            )}
+
             {!account ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Connect your wallet to participate
@@ -220,7 +279,13 @@ export function PollList() {
                 walletAddress={account.address}
                 onVerificationSuccess={(proof) => handleVerificationSuccess(poll.poll_id, proof)}
                 onVerificationError={(error) => {
-                  alert(`Verification error: ${error.message}`);
+                  setPollStatuses(prev => ({
+                    ...prev,
+                    [poll.poll_id]: {
+                      type: "error",
+                      message: `World ID verification failed: ${error.message}`,
+                    },
+                  }));
                   setVerifyingPollId(null);
                 }}
               />
