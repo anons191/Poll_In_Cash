@@ -1,0 +1,234 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { collection, query, orderBy, getDocs, type Timestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useActiveAccount } from "thirdweb/react";
+import { getPollEscrowAddress, bigIntToUsdc } from "@/lib/contracts";
+import { WorldIDVerify } from "./WorldIDVerify";
+import { useSendTransaction } from "thirdweb/react";
+import { prepareContractCall, waitForReceipt } from "thirdweb";
+import { client, chain } from "@/lib/thirdweb";
+import { pollEscrowABI } from "@/lib/pollEscrowABI";
+import { hasWalletVerified } from "@/lib/firestoreHelpers";
+import type { WorldIDProof } from "@/lib/worldcoin";
+
+interface PollData {
+  id: string;
+  poll_id: string;
+  creator_wallet: string;
+  reward_pool: string;
+  reward_per_user: string;
+  max_completions: string;
+  completed_count: number;
+  status: string;
+  created_at: Timestamp;
+}
+
+export function PollList() {
+  const account = useActiveAccount();
+  const [polls, setPolls] = useState<PollData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [verifyingPollId, setVerifyingPollId] = useState<string | null>(null);
+  const [hasVerified, setHasVerified] = useState<Record<string, boolean>>({});
+  
+  const { mutate: sendTransaction } = useSendTransaction();
+
+  useEffect(() => {
+    loadPolls();
+  }, []);
+
+  useEffect(() => {
+    if (account && polls.length > 0) {
+      checkVerifications();
+    }
+  }, [account, polls]);
+
+  const loadPolls = async () => {
+    try {
+      setLoading(true);
+      const pollsRef = collection(db, "polls");
+      const q = query(pollsRef, orderBy("created_at", "desc"));
+      const querySnapshot = await getDocs(q);
+      
+      const pollsData: PollData[] = [];
+      querySnapshot.forEach((doc) => {
+        pollsData.push({
+          id: doc.id,
+          ...doc.data(),
+        } as PollData);
+      });
+      
+      setPolls(pollsData);
+    } catch (err) {
+      console.error("Error loading polls:", err);
+      setError("Failed to load polls");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkVerifications = async () => {
+    if (!account) return;
+    
+    const verificationStatus: Record<string, boolean> = {};
+    for (const poll of polls) {
+      try {
+        const verified = await hasWalletVerified(poll.poll_id, account.address);
+        verificationStatus[poll.poll_id] = verified;
+      } catch (err) {
+        console.error(`Error checking verification for poll ${poll.poll_id}:`, err);
+      }
+    }
+    setHasVerified(verificationStatus);
+  };
+
+  const handleVerificationSuccess = async (pollId: string, proof: WorldIDProof) => {
+    if (!account) return;
+
+    try {
+      setVerifyingPollId(pollId);
+      const escrowAddress = getPollEscrowAddress();
+      const escrowContract = {
+        client,
+        chain,
+        address: escrowAddress as `0x${string}`,
+        abi: pollEscrowABI as any,
+      };
+
+      // Ensure nullifier hash is in the correct format (bytes32)
+      const nullifierHash = proof.nullifier_hash.startsWith("0x") 
+        ? (proof.nullifier_hash as `0x${string}`)
+        : (`0x${proof.nullifier_hash}` as `0x${string}`);
+      
+      const completePollTx = prepareContractCall({
+        contract: escrowContract,
+        method: "completePoll",
+        params: [BigInt(pollId), nullifierHash],
+      });
+
+      sendTransaction(
+        completePollTx,
+        {
+          onSuccess: async (result) => {
+            const receipt = await waitForReceipt({ client, chain, transactionHash: result.transactionHash });
+            alert(`Poll completed! Transaction: ${result.transactionHash}`);
+            setHasVerified(prev => ({ ...prev, [pollId]: true }));
+            await loadPolls(); // Refresh poll data
+            setVerifyingPollId(null);
+          },
+          onError: (error) => {
+            alert(`Failed to complete poll: ${error.message}`);
+            setVerifyingPollId(null);
+          },
+        }
+      );
+    } catch (error: any) {
+      alert(`Error: ${error.message}`);
+      setVerifyingPollId(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-600 dark:text-gray-400">Loading polls...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-red-600 dark:text-red-400">{error}</p>
+      </div>
+    );
+  }
+
+  if (polls.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-600 dark:text-gray-400">
+          No polls available. Create one to get started!
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-bold mb-4">Available Polls</h2>
+      {polls.map((poll) => {
+        const rewardPerUser = bigIntToUsdc(BigInt(poll.reward_per_user));
+        const isActive = poll.status === "live";
+        const userHasVerified = hasVerified[poll.poll_id] || false;
+        const isVerifying = verifyingPollId === poll.poll_id;
+        const canComplete = account && isActive && !userHasVerified && !isVerifying;
+
+        return (
+          <div
+            key={poll.id}
+            className="p-6 border rounded-lg bg-white dark:bg-gray-800 shadow-sm"
+          >
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-xl font-semibold">Poll #{poll.poll_id}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Created by {poll.creator_wallet.slice(0, 6)}...{poll.creator_wallet.slice(-4)}
+                </p>
+              </div>
+              <span
+                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  isActive
+                    ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
+                    : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                }`}
+              >
+                {poll.status}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Reward per user</p>
+                <p className="text-lg font-semibold">{rewardPerUser.toFixed(2)} USDC</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Progress</p>
+                <p className="text-lg font-semibold">
+                  {poll.completed_count} / {poll.max_completions}
+                </p>
+              </div>
+            </div>
+
+            {!account ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Connect your wallet to participate
+              </p>
+            ) : !isActive ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                This poll is no longer active
+              </p>
+            ) : userHasVerified ? (
+              <p className="text-sm text-green-600 dark:text-green-400">
+                ✓ You have already completed this poll
+              </p>
+            ) : (
+              <WorldIDVerify
+                pollId={poll.poll_id}
+                walletAddress={account.address}
+                onVerificationSuccess={(proof) => handleVerificationSuccess(poll.poll_id, proof)}
+                onVerificationError={(error) => {
+                  alert(`Verification error: ${error.message}`);
+                  setVerifyingPollId(null);
+                }}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
