@@ -41,6 +41,7 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 *.cache
+*-firebase-adminsdk-*.json
 
 # functions
 functions/lib/

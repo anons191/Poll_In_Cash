@@ -38,6 +38,8 @@ export function PollList() {
     message: string;
     transactionHash?: string;
   } | null>>({});
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
   
   const { mutate: sendTransaction } = useSendTransaction();
 
@@ -79,6 +81,34 @@ export function PollList() {
     }
     setHasVerified(verificationStatus);
   }, [account, polls]);
+
+  const syncPolls = async () => {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const response = await fetch("/api/sync-polls", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSyncMessage(`✅ ${data.message}`);
+        // Reload polls after sync
+        await loadPolls();
+      } else {
+        setSyncMessage(`❌ ${data.message || "Failed to sync polls"}`);
+      }
+    } catch (err) {
+      console.error("Error syncing polls:", err);
+      setSyncMessage("❌ Failed to sync polls from chain");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     loadPolls();
@@ -198,8 +228,23 @@ export function PollList() {
   if (polls.length === 0) {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-600 dark:text-gray-400">
-          No polls available. Create one to get started!
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          No polls available in Firestore.
+        </p>
+        <button
+          onClick={syncPolls}
+          disabled={syncing}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {syncing ? "Syncing..." : "Sync Polls from Chain"}
+        </button>
+        {syncMessage && (
+          <p className={`mt-4 text-sm ${syncMessage.includes("✅") ? "text-green-600" : "text-red-600"}`}>
+            {syncMessage}
+          </p>
+        )}
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
+          Or create a new poll to get started!
         </p>
       </div>
     );
@@ -207,7 +252,25 @@ export function PollList() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold mb-4">Available Polls</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-2xl font-bold">Available Polls</h2>
+        <button
+          onClick={syncPolls}
+          disabled={syncing}
+          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {syncing ? "Syncing..." : "Sync from Chain"}
+        </button>
+      </div>
+      {syncMessage && (
+        <div className={`p-3 rounded-lg text-sm ${
+          syncMessage.includes("✅") 
+            ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200" 
+            : "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200"
+        }`}>
+          {syncMessage}
+        </div>
+      )}
       {polls.map((poll) => {
         const rewardPerUser = bigIntToUsdc(BigInt(poll.reward_per_user));
         const isActive = poll.status === "live";
