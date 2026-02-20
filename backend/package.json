@@ -1,0 +1,51 @@
+{
+  "name": "poll-in-cash-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Poll in Cash polling marketplace",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "polling",
+    "blockchain",
+    "usdc",
+    "base"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@coinbase/agentkit": "^0.10.4",
+    "@coinbase/cdp-sdk": "^1.44.1",
+    "@hono/node-server": "^1.19.9",
+    "@x402/hono": "^2.3.0",
+    "dotenv": "^16.4.0",
+    "drizzle-orm": "^0.39.0",
+    "ethers": "^6.13.0",
+    "hono": "^4.11.9",
+    "jsonwebtoken": "^9.0.2",
+    "postgres": "^3.4.5",
+    "thirdweb": "^5.118.2",
+    "viem": "^2.46.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "drizzle-kit": "^0.30.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.18"
+  }
+}

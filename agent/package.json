@@ -1,0 +1,42 @@
+{
+  "name": "poll-in-cash-agent",
+  "version": "1.0.0",
+  "description": "AI agent for Poll in Cash polling marketplace",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "demo": "tsx scripts/demo.ts",
+    "onboard": "tsx scripts/onboard.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "agent",
+    "polling",
+    "blockchain",
+    "usdc",
+    "base"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@coinbase/agentkit": "^0.2.0",
+    "@coinbase/cdp-sdk": "^1.0.0",
+    "dotenv": "^16.4.0",
+    "ethers": "^6.13.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
