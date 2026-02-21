@@ -15,29 +15,8 @@
 export * from "./thirdweb/index.js";
 
 // ============ x402 Payment Middleware ============
-export {
-  // Middleware factory
-  createX402Middleware,
-  createX402MiddlewareOptional,
-  createNoOpMiddleware,
-  createResourceServer,
-
-  // Predefined route configs
-  AGENT_ROUTES,
-  AGENT_DISCOVERY_ROUTE,
-  AGENT_MATCH_ROUTE,
-  AGENT_RESPOND_ROUTE,
-
-  // Utilities
-  isX402Available,
-  X402_PAYMENT_HEADER,
-  HTTP_402_PAYMENT_REQUIRED,
-
-  // Types
-  type ProtectedRouteConfig,
-  type RoutesConfig,
-  type X402MiddlewareOptions,
-} from "./x402/middleware.js";
+// Disabled for MVP - x402 facilitator doesn't support Base mainnet yet
+// Re-enable when x402 adds mainnet support
 
 // ============ Convenience Re-exports ============
 
