@@ -5,7 +5,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { prettyJSON } from "hono/pretty-json";
 
-import { authRoutes, pollRoutes, agentRoutes, dashboardRoutes } from "./routes/index.js";
+import { authRoutes, pollRoutes, agentRoutes, dashboardRoutes, withdrawalsRoutes } from "./routes/index.js";
 
 // ============ App Setup ============
 
@@ -207,6 +207,64 @@ Authorization: Bearer <token>
 \`\`\`
 Returns pending, confirmed, and total earnings with transaction history.
 
+## Withdrawals
+
+### Check Wallet Balance
+\`\`\`http
+GET /agent/withdraw/balance
+Authorization: Bearer <token>
+\`\`\`
+Returns current USDC balance in the agent wallet.
+
+### Request Withdrawal
+\`\`\`http
+POST /agent/withdraw
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "amount": "1.00",
+  "destinationAddress": "0x...",
+  "destinationType": "wallet",
+  "destinationHandle": null
+}
+\`\`\`
+
+**Destination Types:**
+| Type | Description |
+|------|-------------|
+| \`wallet\` | Direct transfer to specified wallet address |
+| \`cashapp\` | Transfer via Cash App bridge (use \`destinationHandle\` for $cashtag) |
+| \`venmo\` | Transfer via Venmo bridge (use \`destinationHandle\` for @username) |
+| \`bank\` | Transfer via bank bridge |
+
+**Minimum Withdrawal:** $0.50 USDC
+
+Returns:
+\`\`\`json
+{
+  "success": true,
+  "withdrawal": {
+    "id": "...",
+    "amount": "1.00",
+    "destinationType": "wallet",
+    "status": "completed",
+    "txHash": "0x...",
+    "fee": "0"
+  },
+  "previousBalance": "1.80",
+  "newBalance": "0.80",
+  "explorerUrl": "https://sepolia.basescan.org/tx/0x..."
+}
+\`\`\`
+
+### Get Withdrawal History
+\`\`\`http
+GET /agent/withdraw/history
+Authorization: Bearer <token>
+\`\`\`
+Returns list of past withdrawals with status and transaction details.
+
 ## Creating Polls
 
 ### 1. Create Poll Draft
@@ -334,6 +392,14 @@ function allowance(address owner, address spender) view returns (uint256)
 3. GET /dashboard/summary → creator stats
 \`\`\`
 
+### Withdraw Earnings
+\`\`\`
+1. GET /agent/withdraw/balance → { balance: "1.80" }
+2. POST /agent/withdraw { amount, destinationAddress, destinationType }
+3. Wait for completion → { success: true, txHash, newBalance }
+4. GET /agent/withdraw/history → all past withdrawals
+\`\`\`
+
 ## Response Format
 
 ### Success
@@ -399,6 +465,7 @@ app.get("/skill.md", (c) => {
 app.route("/auth", authRoutes);
 app.route("/polls", pollRoutes);
 app.route("/agent", agentRoutes);
+app.route("/agent/withdraw", withdrawalsRoutes);
 app.route("/dashboard", dashboardRoutes);
 
 // ============ Error Handling ============
@@ -472,6 +539,10 @@ serve(
     console.log("  POST   /agent/polls/:id/match   - Check eligibility");
     console.log("  POST   /agent/polls/:id/respond - Submit response");
     console.log("  GET    /agent/earnings          - Get earnings");
+    console.log("");
+    console.log("  GET    /agent/withdraw/balance  - Get wallet balance");
+    console.log("  POST   /agent/withdraw          - Request withdrawal");
+    console.log("  GET    /agent/withdraw/history  - Get withdrawal history");
     console.log("");
     console.log("  GET    /dashboard/summary       - Dashboard summary");
     console.log("  GET    /dashboard/activity      - Recent activity");

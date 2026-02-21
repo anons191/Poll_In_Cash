@@ -456,10 +456,15 @@ async function runTestFlow(): Promise<void> {
   // Create profile manager with test path
   const manager = new ProfileManager(TEST_PROFILE_PATH);
 
-  // Create a new profile with a test wallet address
+  // Create a new profile (ID is auto-generated, no wallet required from user)
+  const profile = manager.create('Test User Profile');
+  logSuccess(`Empty profile created with ID: ${profile.id.substring(0, 30)}...`);
+
+  // In production, the agent's Agentic Wallet would be auto-provisioned here
+  // For testing, we simulate linking a wallet address
   const testWalletAddress = '0x' + 'a'.repeat(40);
-  const profile = manager.create(testWalletAddress, 'Test User Profile');
-  logSuccess(`Empty profile created with ID: ${profile.id.substring(0, 20)}...`);
+  profile.verifiedAttributes.agentWalletAddress = testWalletAddress;
+  logInfo(`Agent wallet linked: ${testWalletAddress.substring(0, 10)}...`);
 
   // =========================================
   // Step 2: Answer all 15 profile questions

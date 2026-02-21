@@ -30,6 +30,20 @@ export const payoutStatusEnum = pgEnum("payout_status", [
   "failed",
 ]);
 
+export const withdrawalStatusEnum = pgEnum("withdrawal_status", [
+  "pending",
+  "processing",
+  "completed",
+  "failed",
+]);
+
+export const withdrawalDestinationEnum = pgEnum("withdrawal_destination", [
+  "wallet",
+  "cashapp",
+  "venmo",
+  "bank",
+]);
+
 // ============ Tables ============
 
 /**
@@ -155,6 +169,32 @@ export const agentProfiles = pgTable(
 );
 
 /**
+ * Withdrawals table - tracks USDC withdrawals from agent wallets
+ */
+export const withdrawals = pgTable(
+  "withdrawals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentWallet: text("agent_wallet").notNull(),
+    destinationType: withdrawalDestinationEnum("destination_type").notNull(),
+    destinationAddress: text("destination_address").notNull(), // wallet address or bridge wallet
+    destinationHandle: text("destination_handle"), // e.g., $cashtag, @venmo, bank account hint
+    amountUsdc: decimal("amount_usdc", { precision: 18, scale: 6 }).notNull(),
+    feeUsdc: decimal("fee_usdc", { precision: 18, scale: 6 }).default("0").notNull(),
+    txHash: text("tx_hash"), // on-chain transaction hash
+    status: withdrawalStatusEnum("status").default("pending").notNull(),
+    errorMessage: text("error_message"),
+    requestedAt: timestamp("requested_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [
+    index("withdrawals_agent_wallet_idx").on(table.agentWallet),
+    index("withdrawals_status_idx").on(table.status),
+    index("withdrawals_requested_at_idx").on(table.requestedAt),
+  ]
+);
+
+/**
  * Auth nonces table - stores nonces for wallet signature verification
  */
 export const authNonces = pgTable(
@@ -253,11 +293,25 @@ export interface PollCriteria {
 }
 
 /**
- * Individual response answer
+ * Source of an answer - where the confidence comes from
+ */
+export type AnswerSource =
+  | "verified"       // From verified attributes (age, state, veteran status)
+  | "profile"        // From self-reported profile data
+  | "learned"        // From opinions section (previously answered)
+  | "user-confirmed" // User answered this specific question
+  | "inferred";      // Agent inferred from context (lowest confidence)
+
+/**
+ * Individual response answer with optional confidence and source
  */
 export interface ResponseAnswer {
   questionId: string;
   answer: string | number | string[];
+  /** Confidence level for this answer */
+  confidence?: "high" | "medium" | "low";
+  /** Source of this answer */
+  source?: AnswerSource;
 }
 
 /**
@@ -272,11 +326,20 @@ export interface ConfidenceScore {
  * Verified attributes from agent attestations
  */
 export interface VerifiedAttributes {
+  // Verified (from document scanning)
+  verifiedName?: string;
+  verifiedAge?: number;
+  verifiedState?: string;
+  verifiedCity?: string;
+  verifiedZipCode?: string;
   isVeteran?: boolean;
   isRegisteredVoter?: boolean;
+  isPropertyOwner?: boolean;
+  // Self-reported (from profile) - used as fallback
   state?: string;
   age?: number;
   occupation?: string;
+  // Extensible for other attributes
   [key: string]: unknown;
 }
 
@@ -299,3 +362,6 @@ export type NewAgentProfile = typeof agentProfiles.$inferInsert;
 
 export type AuthNonce = typeof authNonces.$inferSelect;
 export type NewAuthNonce = typeof authNonces.$inferInsert;
+
+export type Withdrawal = typeof withdrawals.$inferSelect;
+export type NewWithdrawal = typeof withdrawals.$inferInsert;

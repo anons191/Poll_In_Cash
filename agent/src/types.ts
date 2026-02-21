@@ -71,6 +71,99 @@ export interface BehavioralProfile {
 }
 
 /**
+ * Opinions & Preferences - learned over time through conversations
+ * This section grows organically as the user answers poll questions
+ */
+export interface OpinionsProfile {
+  /** Food & Dining preferences */
+  foodAndDining?: {
+    favoriteCuisine?: string;
+    favoriteRestaurant?: string;
+    dietaryRestrictions?: string;
+    cookingPreference?: string;
+    [key: string]: string | undefined;
+  };
+  /** Politics & Policy stances */
+  politicsAndPolicy?: {
+    healthcareStance?: string;
+    immigrationStance?: string;
+    economyPriority?: string;
+    environmentStance?: string;
+    educationStance?: string;
+    [key: string]: string | undefined;
+  };
+  /** Shopping & Brands preferences */
+  shoppingAndBrands?: {
+    preferredGrocery?: string;
+    favoriteBrands?: string;
+    shoppingStyle?: string;
+    [key: string]: string | undefined;
+  };
+  /** Lifestyle preferences */
+  lifestyle?: {
+    exerciseHabits?: string;
+    entertainmentPreferences?: string;
+    musicPreferences?: string;
+    travelPreferences?: string;
+    [key: string]: string | undefined;
+  };
+  /** Catch-all for learned opinions that don't fit categories */
+  other?: Record<string, string>;
+}
+
+/**
+ * Source of an answer - where the confidence comes from
+ */
+export type AnswerSource =
+  | 'verified'       // From verified attributes (age, state, veteran status)
+  | 'profile'        // From self-reported profile data
+  | 'learned'        // From opinions section (previously answered)
+  | 'user-confirmed' // User answered this specific question
+  | 'inferred';      // Agent inferred from context (lowest confidence)
+
+/**
+ * Confidence classification for poll question answering
+ */
+export type AnswerConfidenceLevel = 'high' | 'medium' | 'low';
+
+/**
+ * Classification result for how to handle a poll question
+ */
+export interface QuestionClassification {
+  /** Can the agent auto-answer this question? */
+  canAutoAnswer: boolean;
+  /** Confidence level if auto-answering */
+  confidence: AnswerConfidenceLevel;
+  /** Source of the answer */
+  source: AnswerSource;
+  /** The answer value if auto-answering */
+  answer?: string | number | string[];
+  /** Reason for classification (for debugging) */
+  reason: string;
+}
+
+/**
+ * Question types that are typically factual vs opinion-based
+ */
+export type QuestionNature = 'factual' | 'opinion' | 'preference' | 'experience';
+
+/**
+ * Learned opinion entry - stored when user manually answers
+ */
+export interface LearnedOpinion {
+  /** The topic/category of the opinion */
+  topic: string;
+  /** The user's stance or preference */
+  stance: string;
+  /** When this was learned */
+  learnedAt: string;
+  /** Original question that led to this learning */
+  sourceQuestion?: string;
+  /** Confidence in this opinion (may decay over time) */
+  confidence: AnswerConfidenceLevel;
+}
+
+/**
  * Individual verification record with metadata
  */
 export interface VerificationRecord {
@@ -231,6 +324,14 @@ export interface VerifiedAttributes {
   documentsVerified?: number;
   /** Overall verification score (0-100) */
   verificationScore?: number;
+
+  // ============ Agent Wallet (Internal) ============
+  /**
+   * The agent's Agentic Wallet address (auto-provisioned)
+   * This is managed by the agent, not provided by the user.
+   * Users never need to see or interact with this address.
+   */
+  agentWalletAddress?: string;
 }
 
 /**
@@ -267,6 +368,8 @@ export interface UserProfile {
   professional: ProfessionalProfile;
   /** Behavioral/lifestyle information */
   behavioral: BehavioralProfile;
+  /** Opinions & preferences learned through conversation */
+  opinions: OpinionsProfile;
   /** Verified attributes from documents */
   verifiedAttributes: VerifiedAttributes;
   /** User preferences */
@@ -395,6 +498,8 @@ export interface QuestionResponse {
   answer: string | number | string[];
   /** Confidence in this answer */
   confidence: ConfidenceLevel;
+  /** Source of this answer (verified, learned, user-confirmed, etc.) */
+  source: AnswerSource;
   /** Reasoning for the answer (internal use) */
   reasoning?: string;
 }
@@ -816,6 +921,86 @@ export interface EarningsSummary {
   reliabilityScore: string;
   /** Recent payout history */
   recentPayouts: Payout[];
+}
+
+// ============ Withdrawal Types ============
+
+/**
+ * Withdrawal destination types
+ */
+export type WithdrawalDestination = 'wallet' | 'cashapp' | 'venmo' | 'bank';
+
+/**
+ * Withdrawal status
+ */
+export type WithdrawalStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+/**
+ * Withdrawal request parameters
+ */
+export interface WithdrawalRequest {
+  /** Amount in USDC to withdraw */
+  amount: string;
+  /** Destination wallet address (for wallet type) or bridge address */
+  destinationAddress: string;
+  /** Type of destination */
+  destinationType: WithdrawalDestination;
+  /** Handle for non-wallet destinations (e.g., $cashtag, @venmo) */
+  destinationHandle?: string;
+}
+
+/**
+ * Withdrawal record
+ */
+export interface Withdrawal {
+  /** Withdrawal ID */
+  id: string;
+  /** Amount in USDC */
+  amount: string;
+  /** Fee in USDC */
+  fee: string;
+  /** Destination type */
+  destinationType: WithdrawalDestination;
+  /** Destination address */
+  destinationAddress: string;
+  /** Destination handle (for non-wallet) */
+  destinationHandle?: string;
+  /** Current status */
+  status: WithdrawalStatus;
+  /** Transaction hash if completed */
+  txHash?: string;
+  /** Error message if failed */
+  errorMessage?: string;
+  /** Request timestamp */
+  requestedAt: string;
+  /** Completion timestamp */
+  completedAt?: string;
+  /** Explorer URL */
+  explorerUrl?: string;
+}
+
+/**
+ * Withdrawal result from API
+ */
+export interface WithdrawalResult {
+  /** Success indicator */
+  success: boolean;
+  /** Withdrawal details */
+  withdrawal: Withdrawal;
+  /** Previous balance */
+  previousBalance: string;
+  /** New balance after withdrawal */
+  newBalance: string;
+  /** Explorer URL for transaction */
+  explorerUrl?: string;
+}
+
+/**
+ * Withdrawal history response
+ */
+export interface WithdrawalHistory {
+  /** List of withdrawals */
+  withdrawals: Withdrawal[];
 }
 
 // ============ Agent Configuration ============

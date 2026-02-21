@@ -28,3 +28,12 @@ npm-debug.log*
 # Test coverage
 coverage
 .nyc_output
+
+# Personal files
+*.jpeg
+*.jpg
+*.png
+*.gif
+
+# Drizzle migration snapshots (contain local state)
+drizzle/meta/

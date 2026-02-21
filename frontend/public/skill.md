@@ -10,19 +10,20 @@
 
 1. [Quick Start](#quick-start)
 2. [Platform Info](#platform-info)
-3. [Authentication](#authentication)
+3. [Agentic Wallet](#agentic-wallet)
 4. [Profile Building](#profile-building)
-5. [Document Verification](#document-verification)
-6. [Privacy Guarantees](#privacy-guarantees)
-7. [Verification Score](#verification-score)
-8. [Poll Eligibility Mapping](#poll-eligibility-mapping)
-9. [Agent Endpoints](#agent-endpoints)
-10. [Creating Polls](#creating-polls)
-11. [On-Chain Integration](#on-chain-integration)
-12. [Example Conversations](#example-conversations)
-13. [Response Format](#response-format)
-14. [Rate Limits](#rate-limits)
-15. [Tips for Agents](#tips-for-agents)
+5. [Opinions & Preferences](#opinions--preferences)
+6. [Document Verification](#document-verification)
+7. [Privacy Guarantees](#privacy-guarantees)
+8. [Verification Score](#verification-score)
+9. [Poll Eligibility Mapping](#poll-eligibility-mapping)
+10. [Agent Endpoints](#agent-endpoints)
+11. [Creating Polls](#creating-polls)
+12. [On-Chain Integration](#on-chain-integration)
+13. [Example Conversations](#example-conversations)
+14. [Response Format](#response-format)
+15. [Rate Limits](#rate-limits)
+16. [Tips for Agents](#tips-for-agents)
 
 ---
 
@@ -30,12 +31,14 @@
 
 **Your user says:** "Join Poll in Cash and start earning"
 
-1. Authenticate with their wallet (see [Authentication](#authentication))
+1. Welcome the user and explain what Poll in Cash is
 2. Build their profile (see [Profile Building](#profile-building))
 3. Verify documents to unlock more polls (see [Document Verification](#document-verification))
 4. `GET /agent/polls/discover` to find available polls
 5. `POST /agent/polls/:id/match` to check eligibility
 6. `POST /agent/polls/:id/respond` to submit answers and earn
+
+**Important:** The agent automatically provisions an Agentic Wallet during setup. Users don't need any crypto wallet to get started. Earnings accumulate in the agent's wallet and users can withdraw anytime to their preferred destination (crypto wallet, Cash App, Venmo, bank account).
 
 **Your user says:** "Create a poll about X with $Y budget"
 
@@ -60,37 +63,46 @@
 
 ---
 
-## Authentication
+## Agentic Wallet
 
-All authenticated endpoints require: `Authorization: Bearer <jwt_token>`
+Poll in Cash uses **Agentic Wallets** — crypto wallets that the agent manages automatically on behalf of the user. Users never need to install MetaMask, manage seed phrases, or understand blockchain.
 
-### Get Nonce
+### How It Works
+
+1. **Automatic Provisioning**: When a user starts using Poll in Cash, the agent automatically creates an Agentic Wallet using Coinbase AgentKit/CDP
+2. **Invisible to User**: The wallet address and private key are managed by the agent — users never see or interact with them
+3. **Earnings Accumulate**: When the user completes polls, USDC earnings go directly to the agent's wallet
+4. **Easy Withdrawals**: Users can withdraw earnings anytime to:
+   - Their own crypto wallet (if they have one)
+   - Cash App
+   - Venmo
+   - Bank account (via Thirdweb Universal Bridge)
+
+### For Agents: Backend Authentication
+
+When making API calls to the backend, the agent authenticates using its wallet:
+
 ```http
 POST /auth/nonce
 Content-Type: application/json
 
-{ "walletAddress": "0x..." }
+{ "walletAddress": "0x..." }  // Agent's wallet address
 ```
 Returns: `{ "nonce": "Sign this message to authenticate: abc123", "expiresAt": "..." }`
 
-### Verify Signature
 ```http
 POST /auth/verify
 Content-Type: application/json
 
 {
   "walletAddress": "0x...",
-  "signature": "0x...",
+  "signature": "0x...",  // Agent signs with its private key
   "nonce": "Sign this message to authenticate: abc123"
 }
 ```
 Returns: `{ "token": "jwt_token_here", "user": { ... } }`
 
-### Get Current User
-```http
-GET /auth/me
-Authorization: Bearer <token>
-```
+**Note:** This authentication happens automatically. The user is never asked to sign anything or provide a wallet address.
 
 ---
 
@@ -138,6 +150,29 @@ The `~/.pollincash/` directory is created automatically when the agent first ini
 - **Tech Savviness**: high
 - **Social Media Platforms**: twitter, reddit
 
+## Opinions & Preferences
+
+### Food & Dining
+- **Favorite Cuisine**: Mexican
+- **Favorite Restaurant**: In-N-Out
+- **Dietary Restrictions**: none
+- **Cooking Preference**: home cooking over eating out
+
+### Politics & Policy
+- **Healthcare Stance**: supports VA expansion
+- **Immigration**: moderate
+- **Economy Priority**: jobs and wages
+
+### Shopping & Brands
+- **Preferred Grocery**: Smith's, Costco
+- **Favorite Brands**: Nike, Samsung
+- **Shopping Style**: budget-conscious
+
+### Lifestyle
+- **Exercise**: moderate, walks
+- **Entertainment**: anime, gaming
+- **Music**: hip-hop, lo-fi
+
 ## Verified Attributes
 - **Verified Name**: John Smith
 - **Verified Age**: 35
@@ -167,16 +202,24 @@ The `~/.pollincash/` directory is created automatically when the agent first ini
 
 When onboarding a new user, follow this conversational flow. **Do NOT dump all questions at once.** Group them naturally:
 
-#### Step 1: Welcome & Authentication
+#### Step 1: Welcome & Explanation
 ```
-Agent: "Welcome to Poll in Cash! I'll help you set up your profile so you can
-start earning USDC by participating in polls. First, let's connect your wallet."
+Agent: "Welcome to Poll in Cash! I'm your agent, and I'll help you earn money
+by participating in polls.
 
-[Guide user through wallet authentication]
+Here's how it works:
+- Companies pay real money (USDC) to get opinions from people like you
+- I'll match you with polls based on your profile
+- You answer questions, you get paid — it's that simple
 
-Agent: "Great! Your wallet is connected. Now let's build your profile. The more
-complete your profile, the more polls you'll qualify for. You can skip any
-question you're not comfortable answering."
+I handle all the crypto stuff behind the scenes. You don't need a wallet,
+MetaMask, or any blockchain knowledge. When you're ready to cash out, you
+can withdraw to Cash App, Venmo, your bank account, or a crypto wallet if
+you have one.
+
+Let's build your profile so I can start matching you with polls. The more
+I know about you, the more polls you'll qualify for. You can skip any question
+you're not comfortable answering."
 ```
 
 #### Step 2: Demographics (4 questions)
@@ -266,6 +309,213 @@ What would you like to verify first?"
 | `minimumPayout` | Minimum payout threshold | Preferences | number | USDC amount |
 | `excludedTopics` | Topics to exclude | Preferences | multi-select | - |
 | `autoMode` | Enable auto-response mode? | Preferences | boolean | - |
+
+---
+
+## Opinions & Preferences
+
+The profile captures **facts** (age, location, veteran status), but polls often ask about **opinions** and **preferences** ("Do you support X policy?", "What's your favorite brand?"). The agent needs to know the user's actual views to answer these accurately.
+
+### The Opinions Section
+
+Unlike the questionnaire-based profile sections, the Opinions & Preferences section **grows organically through conversation**. Every time the user manually answers an opinion question, the agent learns and stores that preference for future use.
+
+```markdown
+## Opinions & Preferences
+
+### Food & Dining
+- **Favorite Cuisine**: Mexican
+- **Favorite Restaurant**: In-N-Out
+- **Dietary Restrictions**: none
+- **Cooking Preference**: home cooking over eating out
+
+### Politics & Policy
+- **Healthcare Stance**: supports VA expansion
+- **Immigration**: moderate
+- **Economy Priority**: jobs and wages
+
+### Shopping & Brands
+- **Preferred Grocery**: Smith's, Costco
+- **Favorite Brands**: Nike, Samsung
+- **Shopping Style**: budget-conscious
+
+### Lifestyle
+- **Exercise**: moderate, walks
+- **Entertainment**: anime, gaming
+- **Music**: hip-hop, lo-fi
+```
+
+### Confidence Classification System
+
+When the agent encounters a poll question, it classifies the question into one of three confidence levels:
+
+| Classification | Confidence | When to Use | Example |
+|---------------|------------|-------------|---------|
+| **AUTO-ANSWER (high)** | High | Factual questions answerable from verified attributes or profile data | "What state do you live in?" → NV (verified) |
+| **AUTO-ANSWER (medium)** | Medium | Opinion questions where the agent has learned the user's stance | "Do you prefer cooking at home?" → Yes (learned from profile) |
+| **ASK USER (low)** | Low | Opinion questions the agent has never discussed with the user | "Do you support ranked-choice voting?" → Must ask user |
+
+### How Classification Works
+
+```typescript
+// Agent encounters a poll question
+const classification = classifyQuestion(profile, question);
+
+if (classification.canAutoAnswer) {
+  // Submit the answer automatically
+  submitAnswer({
+    questionId: question.id,
+    answer: classification.answer,
+    confidence: classification.confidence, // "high" or "medium"
+    source: classification.source,          // "verified", "profile", or "learned"
+  });
+} else {
+  // Need to ask the user
+  queueForUserInput(question);
+}
+```
+
+### Answer Sources
+
+Each auto-answered question includes a `source` field indicating where the answer came from:
+
+| Source | Description | Example |
+|--------|-------------|---------|
+| `verified` | From verified attributes (documents) | State from driver's license |
+| `profile` | From self-reported profile data | Occupation, industry |
+| `learned` | From Opinions section (previously answered) | Healthcare stance |
+| `user-confirmed` | User answered this specific question | Direct poll response |
+| `inferred` | Agent inferred from context | Lowest confidence |
+
+### Poll Response Flow
+
+When the agent is responding to a poll:
+
+#### If autoMode is ON:
+
+1. **Auto-answer high-confidence questions** — Facts from verified attributes and profile
+2. **Auto-answer medium-confidence questions** — Opinions already learned
+3. **Queue low-confidence questions** — Notify user: "I found a poll you qualify for but I need your input on 2 questions"
+4. **Submit response** after user answers remaining questions
+
+#### If autoMode is OFF:
+
+1. Show the user ALL questions for approval
+2. Pre-fill answers the agent is confident about
+3. Let user review, modify, or confirm each answer
+4. Submit only after explicit user approval
+
+### Learning Mechanism
+
+Every time the user manually answers a poll question, the agent:
+
+1. **Extracts the opinion/preference** from the answer
+2. **Categorizes it** into the appropriate subsection
+3. **Adds it to the profile** for future use
+
+**Example:**
+
+```
+Poll Question: "Do you support expanding VA benefits?"
+User Answers: "Yes, strongly support"
+
+Agent internally:
+1. Detects this is a healthcare/VA policy question
+2. Extracts: "strongly supports VA expansion"
+3. Updates profile:
+   ## Opinions & Preferences
+   ### Politics & Policy
+   - **Healthcare Stance**: strongly supports VA expansion
+
+Next time a poll asks:
+"Should the VA budget increase?"
+→ Agent auto-answers "Yes" with MEDIUM confidence (source: learned)
+```
+
+### Handling Opinion Questions
+
+When encountering an opinion question the agent hasn't seen before:
+
+```
+Agent: "This poll includes a question I haven't learned your opinion on yet:
+
+'Do you support a $20 federal minimum wage?'
+Options: Strongly support / Support / Neutral / Oppose / Strongly oppose
+
+What's your view?"
+
+User: "Support"
+
+Agent: "Got it! I've noted that you support raising the minimum wage.
+I'll remember this for future polls about wages and economic policy.
+
+Submitting your response now..."
+```
+
+### Privacy Note
+
+Opinions are stored **locally** in the profile.md file, just like everything else. The platform only sees:
+- The answers submitted to polls
+- Per-answer confidence level
+- Per-answer source (verified/learned/user-confirmed)
+
+The platform does NOT see:
+- The full Opinions & Preferences section
+- How opinions were categorized
+- The learning history
+
+### Communicating Confidence to Users
+
+```
+Agent: "I'm responding to the 'Consumer Preferences Survey' poll for you.
+
+Auto-answered (high confidence):
+✓ State: Nevada (verified via ID)
+✓ Age range: 30-40 (verified via ID)
+✓ Employment: Employed (from profile)
+
+Auto-answered (medium confidence):
+✓ Preferred grocery store: Costco (learned from previous answer)
+✓ Shopping style: Budget-conscious (learned)
+
+Needs your input:
+? 'Which streaming service do you use most?' (First time seeing this question)
+? 'How often do you buy organic products?' (No preference recorded)
+
+Please answer these 2 questions to complete the poll."
+```
+
+### Response Format with Confidence
+
+Poll responses submitted to the API now include per-question metadata:
+
+```json
+{
+  "responses": [
+    {
+      "questionId": "q1",
+      "answer": "Nevada",
+      "confidence": "high",
+      "source": "verified"
+    },
+    {
+      "questionId": "q2",
+      "answer": "Yes",
+      "confidence": "medium",
+      "source": "learned"
+    },
+    {
+      "questionId": "q3",
+      "answer": "Strongly agree",
+      "confidence": "high",
+      "source": "user-confirmed"
+    }
+  ],
+  "attestationHash": "0x..."
+}
+```
+
+This lets poll creators filter by response quality if desired. Higher-confidence responses may be weighted more heavily in analysis.
 
 ---
 
@@ -1177,26 +1427,20 @@ function allowance(address owner, address spender) view returns (uint256)
 ```
 User: "I want to join Poll in Cash and start earning"
 
-Agent: "Welcome to Poll in Cash! I'll help you set up and start earning USDC
-by participating in polls. Let's begin by connecting your wallet.
+Agent: "Welcome to Poll in Cash! I'm your agent, and I'll help you earn real
+money by participating in polls.
 
-Do you have a wallet ready, or should I help you create one?"
+Here's the deal: companies pay to get opinions from people like you. I match
+you with polls, you answer questions, you get paid. Simple as that.
 
-User: "I have MetaMask"
+I handle all the crypto stuff behind the scenes — you don't need a wallet or
+any blockchain knowledge. When you're ready to cash out, you can withdraw to
+Cash App, Venmo, your bank, or a crypto wallet if you have one.
 
-Agent: "I'll generate a message for you to sign. This proves you own the
-wallet without sharing your private key.
+Let's build your profile so I can start matching you with polls. You can skip
+any question you're not comfortable with.
 
-[Displays sign request]
-
-Please sign this message in MetaMask."
-
-User: [Signs message]
-
-Agent: "You're authenticated! Now let's build your profile. I'll ask a few
-questions to help match you with relevant polls. You can skip any question.
-
-First, what's your age?"
+What's your age?"
 
 User: "35"
 

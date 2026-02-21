@@ -168,8 +168,8 @@ export function getConfigSummary(config: AgentConfig): string {
 // Export default config for convenience
 export const defaultConfig = DEFAULT_AGENT_CONFIG;
 
-// Contract address constant
-export const POLL_CONTRACT_ADDRESS = '0xf6fea61ac2d3bfc57bb63048594a203970580bd6';
+// Contract address constant (must match backend POLLPOOL_CONTRACT_ADDRESS)
+export const POLL_CONTRACT_ADDRESS = '0x7e12a6a4d5f2ee3630ec4350ba2bb38d1a6cfe2a';
 
 // USDC contract address on Base Sepolia
 export const USDC_CONTRACT_ADDRESS = process.env.USDC_CONTRACT_ADDRESS ||

@@ -351,18 +351,17 @@ export class PollAgent extends EventEmitter {
   }): Promise<{ profile: UserProfile; walletAddress: string }> {
     this.emit('log', 'Starting onboarding...');
 
-    // Create new profile
-    const profileId = options?.profileId || `user-${Date.now()}`;
-    const profile = this.profileManager.create(profileId, options?.displayName);
+    // Create new profile (ID is auto-generated)
+    const profile = this.profileManager.create(options?.displayName);
     this.state.profile = profile;
 
-    // Initialize wallet
+    // Initialize the agent's Agentic Wallet (auto-provisioned, user never sees this)
     await this.walletManager.initialize(options?.walletData);
     const walletAddress = this.walletManager.getWalletAddress()!;
     this.state.walletAddress = walletAddress;
 
-    // Update profile ID to wallet address
-    profile.id = walletAddress;
+    // Link the agent wallet to the profile (internally, user doesn't need to know)
+    profile.verifiedAttributes.agentWalletAddress = walletAddress;
 
     // Set up attestation manager
     const wallet = this.walletManager.getWallet();

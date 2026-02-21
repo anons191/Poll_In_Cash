@@ -54,7 +54,7 @@ export const createPollSchema = z.object({
   cashPoolUsdc: z
     .string()
     .regex(/^\d+(\.\d{1,6})?$/, "Invalid USDC amount")
-    .refine((val) => parseFloat(val) >= 5, { message: "Minimum pool is 5 USDC" }),
+    .refine((val) => parseFloat(val) >= 4, { message: "Minimum pool is 4 USDC" }),
   participantCap: z.number().int().positive().min(1).max(10000),
   visibility: z.enum(["public", "private"]).default("public"),
   expiresAt: z.string().datetime().optional(),
@@ -66,11 +66,30 @@ export const fundPollSchema = z.object({
 
 // ============ Agent/Response Schemas ============
 
+/**
+ * Source of an answer - where the confidence comes from
+ */
+export const answerSourceSchema = z.enum([
+  "verified",       // From verified attributes (age, state, veteran status)
+  "profile",        // From self-reported profile data
+  "learned",        // From opinions section (previously answered)
+  "user-confirmed", // User answered this specific question
+  "inferred",       // Agent inferred from context (lowest confidence)
+]);
+
+/**
+ * Enhanced response answer with confidence and source
+ */
 export const responseAnswerSchema = z.object({
   questionId: z.string().min(1),
   answer: z.union([z.string(), z.number(), z.array(z.string())]),
+  confidence: z.enum(["high", "medium", "low"]).optional(),
+  source: answerSourceSchema.optional(),
 });
 
+/**
+ * @deprecated Use confidence and source in responseAnswerSchema instead
+ */
 export const confidenceScoreSchema = z.object({
   questionId: z.string().min(1),
   confidence: z.enum(["high", "medium", "low"]),
@@ -78,13 +97,21 @@ export const confidenceScoreSchema = z.object({
 
 export const submitResponseSchema = z.object({
   responses: z.array(responseAnswerSchema).min(1),
-  confidenceScores: z.array(confidenceScoreSchema).optional(),
+  confidenceScores: z.array(confidenceScoreSchema).optional(), // Deprecated, kept for backwards compatibility
   attestationHash: z.string().min(1, "Attestation hash is required"),
 });
 
 export const verifiedAttributesSchema = z.object({
+  // Verified attributes (from document verification)
+  verifiedName: z.string().optional(),
+  verifiedAge: z.number().int().positive().optional(),
+  verifiedState: z.string().length(2).optional(),
+  verifiedCity: z.string().optional(),
+  verifiedZipCode: z.string().optional(),
   isVeteran: z.boolean().optional(),
   isRegisteredVoter: z.boolean().optional(),
+  isPropertyOwner: z.boolean().optional(),
+  // Self-reported attributes (fallback)
   state: z.string().length(2).optional(),
   age: z.number().int().positive().optional(),
   occupation: z.string().optional(),

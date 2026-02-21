@@ -11,13 +11,20 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
 import type {
   UserProfile,
   DemographicProfile,
   ProfessionalProfile,
   BehavioralProfile,
+  OpinionsProfile,
   VerifiedAttributes,
   UserPreferences,
+  LearnedOpinion,
+  QuestionClassification,
+  AnswerSource,
+  AnswerConfidenceLevel,
+  PollQuestion,
 } from './types.js';
 
 /**
@@ -40,6 +47,7 @@ const SECTION_HEADERS = {
   DEMOGRAPHICS: '## Demographics',
   PROFESSIONAL: '## Professional',
   BEHAVIORAL: '## Behavioral',
+  OPINIONS: '## Opinions & Preferences',
   VERIFIED: '## Verified Attributes',
   PREFERENCES: '## Preferences',
   METADATA: '## Metadata',
@@ -227,6 +235,7 @@ export function parseProfileFromMarkdown(markdown: string): UserProfile {
     demographics: {},
     professional: {},
     behavioral: {},
+    opinions: {},
     verifiedAttributes: {},
     preferences: {},
     createdAt: new Date().toISOString(),
@@ -299,6 +308,30 @@ function setProfileValue(
     case 'behavioral':
       setNestedValue(profile.behavioral as Record<string, unknown>, key, parsed);
       break;
+    case 'opinions & preferences':
+    case 'opinionspreferences':
+    case 'opinions':
+      setOpinionValue(profile.opinions, key, parsed);
+      break;
+    case 'food & dining':
+    case 'fooddining':
+      if (!profile.opinions.foodAndDining) profile.opinions.foodAndDining = {};
+      setNestedValue(profile.opinions.foodAndDining as Record<string, unknown>, key, parsed);
+      break;
+    case 'politics & policy':
+    case 'politicspolicy':
+      if (!profile.opinions.politicsAndPolicy) profile.opinions.politicsAndPolicy = {};
+      setNestedValue(profile.opinions.politicsAndPolicy as Record<string, unknown>, key, parsed);
+      break;
+    case 'shopping & brands':
+    case 'shoppingbrands':
+      if (!profile.opinions.shoppingAndBrands) profile.opinions.shoppingAndBrands = {};
+      setNestedValue(profile.opinions.shoppingAndBrands as Record<string, unknown>, key, parsed);
+      break;
+    case 'lifestyle':
+      if (!profile.opinions.lifestyle) profile.opinions.lifestyle = {};
+      setNestedValue(profile.opinions.lifestyle as Record<string, unknown>, key, parsed);
+      break;
     case 'verified attributes':
     case 'verifiedattributes':
       setNestedValue(profile.verifiedAttributes as Record<string, unknown>, key, parsed);
@@ -313,6 +346,73 @@ function setProfileValue(
       if (key === 'version') profile.version = parseInt(value, 10) || 1;
       break;
   }
+}
+
+/**
+ * Set a value in the opinions section, routing to appropriate subsection
+ */
+function setOpinionValue(opinions: OpinionsProfile, key: string, value: unknown): void {
+  const normalizedKey = key.toLowerCase().replace(/\s+/g, '');
+
+  // Food & Dining keys
+  const foodKeys = ['favoritecuisine', 'favoriterestaurant', 'dietaryrestrictions', 'cookingpreference'];
+  if (foodKeys.includes(normalizedKey)) {
+    if (!opinions.foodAndDining) opinions.foodAndDining = {};
+    opinions.foodAndDining[toCamelCase(normalizedKey)] = String(value);
+    return;
+  }
+
+  // Politics & Policy keys
+  const policyKeys = ['healthcarestance', 'immigrationstance', 'economypriority', 'environmentstance', 'educationstance', 'immigration', 'healthcare'];
+  if (policyKeys.includes(normalizedKey)) {
+    if (!opinions.politicsAndPolicy) opinions.politicsAndPolicy = {};
+    const canonicalKey = normalizedKey.endsWith('stance') ? normalizedKey : normalizedKey + 'Stance';
+    opinions.politicsAndPolicy[toCamelCase(canonicalKey)] = String(value);
+    return;
+  }
+
+  // Shopping & Brands keys
+  const shoppingKeys = ['preferredgrocery', 'favoritebrands', 'shoppingstyle'];
+  if (shoppingKeys.includes(normalizedKey)) {
+    if (!opinions.shoppingAndBrands) opinions.shoppingAndBrands = {};
+    opinions.shoppingAndBrands[toCamelCase(normalizedKey)] = String(value);
+    return;
+  }
+
+  // Lifestyle keys
+  const lifestyleKeys = ['exercisehabits', 'exercise', 'entertainmentpreferences', 'entertainment', 'musicpreferences', 'music', 'travelpreferences', 'travel'];
+  if (lifestyleKeys.includes(normalizedKey)) {
+    if (!opinions.lifestyle) opinions.lifestyle = {};
+    // Normalize shortened keys
+    let canonicalKey = normalizedKey;
+    if (normalizedKey === 'exercise') canonicalKey = 'exercisehabits';
+    if (normalizedKey === 'entertainment') canonicalKey = 'entertainmentpreferences';
+    if (normalizedKey === 'music') canonicalKey = 'musicpreferences';
+    if (normalizedKey === 'travel') canonicalKey = 'travelpreferences';
+    opinions.lifestyle[toCamelCase(canonicalKey)] = String(value);
+    return;
+  }
+
+  // Fallback to other
+  if (!opinions.other) opinions.other = {};
+  opinions.other[key] = String(value);
+}
+
+/**
+ * Convert a key to camelCase
+ */
+function toCamelCase(key: string): string {
+  return key.replace(/[-_](.)/g, (_, c) => c.toUpperCase());
+}
+
+/**
+ * Format a camelCase key for display (e.g., "healthcareStance" -> "Healthcare Stance")
+ */
+function formatKey(key: string): string {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (str) => str.toUpperCase())
+    .trim();
 }
 
 /**
@@ -505,6 +605,119 @@ export function serializeProfileToMarkdown(profile: UserProfile): string {
     lines.push(`- **Social Media Platforms**: ${profile.behavioral.socialMediaPlatforms.join(', ')}`);
   }
   lines.push('');
+
+  // Opinions & Preferences section
+  lines.push(SECTION_HEADERS.OPINIONS);
+  lines.push('');
+
+  const op = profile.opinions || {};
+
+  // Food & Dining subsection
+  if (op.foodAndDining && Object.keys(op.foodAndDining).some(k => op.foodAndDining![k])) {
+    lines.push('### Food & Dining');
+    if (op.foodAndDining.favoriteCuisine) {
+      lines.push(`- **Favorite Cuisine**: ${op.foodAndDining.favoriteCuisine}`);
+    }
+    if (op.foodAndDining.favoriteRestaurant) {
+      lines.push(`- **Favorite Restaurant**: ${op.foodAndDining.favoriteRestaurant}`);
+    }
+    if (op.foodAndDining.dietaryRestrictions) {
+      lines.push(`- **Dietary Restrictions**: ${op.foodAndDining.dietaryRestrictions}`);
+    }
+    if (op.foodAndDining.cookingPreference) {
+      lines.push(`- **Cooking Preference**: ${op.foodAndDining.cookingPreference}`);
+    }
+    // Any additional food preferences
+    for (const [key, val] of Object.entries(op.foodAndDining)) {
+      if (val && !['favoriteCuisine', 'favoriteRestaurant', 'dietaryRestrictions', 'cookingPreference'].includes(key)) {
+        lines.push(`- **${formatKey(key)}**: ${val}`);
+      }
+    }
+    lines.push('');
+  }
+
+  // Politics & Policy subsection
+  if (op.politicsAndPolicy && Object.keys(op.politicsAndPolicy).some(k => op.politicsAndPolicy![k])) {
+    lines.push('### Politics & Policy');
+    if (op.politicsAndPolicy.healthcareStance) {
+      lines.push(`- **Healthcare Stance**: ${op.politicsAndPolicy.healthcareStance}`);
+    }
+    if (op.politicsAndPolicy.immigrationStance) {
+      lines.push(`- **Immigration**: ${op.politicsAndPolicy.immigrationStance}`);
+    }
+    if (op.politicsAndPolicy.economyPriority) {
+      lines.push(`- **Economy Priority**: ${op.politicsAndPolicy.economyPriority}`);
+    }
+    if (op.politicsAndPolicy.environmentStance) {
+      lines.push(`- **Environment**: ${op.politicsAndPolicy.environmentStance}`);
+    }
+    if (op.politicsAndPolicy.educationStance) {
+      lines.push(`- **Education**: ${op.politicsAndPolicy.educationStance}`);
+    }
+    // Any additional policy opinions
+    for (const [key, val] of Object.entries(op.politicsAndPolicy)) {
+      if (val && !['healthcareStance', 'immigrationStance', 'economyPriority', 'environmentStance', 'educationStance'].includes(key)) {
+        lines.push(`- **${formatKey(key)}**: ${val}`);
+      }
+    }
+    lines.push('');
+  }
+
+  // Shopping & Brands subsection
+  if (op.shoppingAndBrands && Object.keys(op.shoppingAndBrands).some(k => op.shoppingAndBrands![k])) {
+    lines.push('### Shopping & Brands');
+    if (op.shoppingAndBrands.preferredGrocery) {
+      lines.push(`- **Preferred Grocery**: ${op.shoppingAndBrands.preferredGrocery}`);
+    }
+    if (op.shoppingAndBrands.favoriteBrands) {
+      lines.push(`- **Favorite Brands**: ${op.shoppingAndBrands.favoriteBrands}`);
+    }
+    if (op.shoppingAndBrands.shoppingStyle) {
+      lines.push(`- **Shopping Style**: ${op.shoppingAndBrands.shoppingStyle}`);
+    }
+    // Any additional shopping preferences
+    for (const [key, val] of Object.entries(op.shoppingAndBrands)) {
+      if (val && !['preferredGrocery', 'favoriteBrands', 'shoppingStyle'].includes(key)) {
+        lines.push(`- **${formatKey(key)}**: ${val}`);
+      }
+    }
+    lines.push('');
+  }
+
+  // Lifestyle subsection
+  if (op.lifestyle && Object.keys(op.lifestyle).some(k => op.lifestyle![k])) {
+    lines.push('### Lifestyle');
+    if (op.lifestyle.exerciseHabits) {
+      lines.push(`- **Exercise**: ${op.lifestyle.exerciseHabits}`);
+    }
+    if (op.lifestyle.entertainmentPreferences) {
+      lines.push(`- **Entertainment**: ${op.lifestyle.entertainmentPreferences}`);
+    }
+    if (op.lifestyle.musicPreferences) {
+      lines.push(`- **Music**: ${op.lifestyle.musicPreferences}`);
+    }
+    if (op.lifestyle.travelPreferences) {
+      lines.push(`- **Travel**: ${op.lifestyle.travelPreferences}`);
+    }
+    // Any additional lifestyle preferences
+    for (const [key, val] of Object.entries(op.lifestyle)) {
+      if (val && !['exerciseHabits', 'entertainmentPreferences', 'musicPreferences', 'travelPreferences'].includes(key)) {
+        lines.push(`- **${formatKey(key)}**: ${val}`);
+      }
+    }
+    lines.push('');
+  }
+
+  // Other opinions (catch-all)
+  if (op.other && Object.keys(op.other).length > 0) {
+    lines.push('### Other');
+    for (const [key, val] of Object.entries(op.other)) {
+      if (val) {
+        lines.push(`- **${formatKey(key)}**: ${val}`);
+      }
+    }
+    lines.push('');
+  }
 
   // Verified Attributes section
   lines.push(SECTION_HEADERS.VERIFIED);
@@ -745,16 +958,32 @@ export async function saveProfile(profile: UserProfile, filePath: string): Promi
 }
 
 /**
- * Create a new empty profile with the given ID
+ * Generate a unique profile ID
+ * Format: profile_<random-uuid>
  */
-export function createEmptyProfile(id: string, displayName?: string): UserProfile {
+export function generateProfileId(): string {
+  return `profile_${crypto.randomUUID()}`;
+}
+
+/**
+ * Create a new empty profile
+ *
+ * @param displayName - Optional display name for the profile
+ * @param id - Optional ID (auto-generated if not provided)
+ *
+ * Note: The wallet address is NOT required during profile creation.
+ * The agent's Agentic Wallet is provisioned separately and linked later.
+ * Users never need to provide a wallet address.
+ */
+export function createEmptyProfile(displayName?: string, id?: string): UserProfile {
   const now = new Date().toISOString();
   return {
-    id,
+    id: id ?? generateProfileId(),
     displayName,
     demographics: {},
     professional: {},
     behavioral: {},
+    opinions: {},
     verifiedAttributes: {},
     preferences: {},
     createdAt: now,
@@ -819,6 +1048,7 @@ export function updateProfile(
     demographics: Partial<DemographicProfile>;
     professional: Partial<ProfessionalProfile>;
     behavioral: Partial<BehavioralProfile>;
+    opinions: Partial<OpinionsProfile>;
     verifiedAttributes: Partial<VerifiedAttributes>;
     preferences: Partial<UserPreferences>;
   }>
@@ -834,6 +1064,9 @@ export function updateProfile(
   if (updates.behavioral) {
     updated.behavioral = { ...updated.behavioral, ...updates.behavioral };
   }
+  if (updates.opinions) {
+    updated.opinions = mergeOpinions(updated.opinions, updates.opinions);
+  }
   if (updates.verifiedAttributes) {
     updated.verifiedAttributes = { ...updated.verifiedAttributes, ...updates.verifiedAttributes };
   }
@@ -845,6 +1078,31 @@ export function updateProfile(
   updated.version += 1;
 
   return updated;
+}
+
+/**
+ * Deep merge opinions, preserving existing values while adding new ones
+ */
+function mergeOpinions(existing: OpinionsProfile, updates: Partial<OpinionsProfile>): OpinionsProfile {
+  const merged = { ...existing };
+
+  if (updates.foodAndDining) {
+    merged.foodAndDining = { ...merged.foodAndDining, ...updates.foodAndDining };
+  }
+  if (updates.politicsAndPolicy) {
+    merged.politicsAndPolicy = { ...merged.politicsAndPolicy, ...updates.politicsAndPolicy };
+  }
+  if (updates.shoppingAndBrands) {
+    merged.shoppingAndBrands = { ...merged.shoppingAndBrands, ...updates.shoppingAndBrands };
+  }
+  if (updates.lifestyle) {
+    merged.lifestyle = { ...merged.lifestyle, ...updates.lifestyle };
+  }
+  if (updates.other) {
+    merged.other = { ...merged.other, ...updates.other };
+  }
+
+  return merged;
 }
 
 /**
@@ -910,6 +1168,424 @@ export function getProfileCompleteness(profile: UserProfile): number {
   return Math.round((filled / total) * 100);
 }
 
+// ============ Opinion Learning & Classification ============
+
+/**
+ * Classify a poll question to determine how to answer it
+ *
+ * Returns classification indicating:
+ * - Whether agent can auto-answer
+ * - Confidence level (high/medium/low)
+ * - Source of answer (verified/profile/learned/inferred)
+ * - The answer value if auto-answerable
+ */
+export function classifyQuestion(
+  profile: UserProfile,
+  question: PollQuestion
+): QuestionClassification {
+  const questionText = question.text.toLowerCase();
+
+  // 1. Check for factual questions answerable from verified attributes
+  const verifiedAnswer = checkVerifiedAttributes(profile, questionText);
+  if (verifiedAnswer) {
+    return {
+      canAutoAnswer: true,
+      confidence: 'high',
+      source: 'verified',
+      answer: verifiedAnswer,
+      reason: 'Answer from verified attributes',
+    };
+  }
+
+  // 2. Check for factual questions answerable from profile data
+  const profileAnswer = checkProfileData(profile, questionText);
+  if (profileAnswer) {
+    return {
+      canAutoAnswer: true,
+      confidence: 'high',
+      source: 'profile',
+      answer: profileAnswer,
+      reason: 'Answer from self-reported profile',
+    };
+  }
+
+  // 3. Check for opinion questions answerable from learned preferences
+  const learnedAnswer = checkLearnedOpinions(profile, questionText, question.options);
+  if (learnedAnswer) {
+    return {
+      canAutoAnswer: true,
+      confidence: 'medium',
+      source: 'learned',
+      answer: learnedAnswer.answer,
+      reason: `Learned from previous answer: ${learnedAnswer.topic}`,
+    };
+  }
+
+  // 4. Cannot auto-answer - need user input
+  return {
+    canAutoAnswer: false,
+    confidence: 'low',
+    source: 'user-confirmed',
+    reason: 'No matching opinion found - need user input',
+  };
+}
+
+/**
+ * Check if question can be answered from verified attributes
+ */
+function checkVerifiedAttributes(
+  profile: UserProfile,
+  questionText: string
+): string | number | undefined {
+  const va = profile.verifiedAttributes;
+
+  // State/location questions
+  if (questionText.includes('state') || questionText.includes('where do you live')) {
+    if (va.verifiedState) return va.verifiedState;
+  }
+
+  // City questions
+  if (questionText.includes('city')) {
+    if (va.verifiedCity) return va.verifiedCity;
+  }
+
+  // Age questions
+  if (questionText.includes('age') || questionText.includes('how old')) {
+    if (va.verifiedAge) return va.verifiedAge;
+  }
+
+  // Veteran status
+  if (questionText.includes('veteran') || questionText.includes('military')) {
+    if (va.isVeteran !== undefined) return va.isVeteran ? 'Yes' : 'No';
+  }
+
+  // Voter registration
+  if (questionText.includes('registered voter') || questionText.includes('voter registration')) {
+    if (va.isRegisteredVoter !== undefined) return va.isRegisteredVoter ? 'Yes' : 'No';
+  }
+
+  // Property owner
+  if (questionText.includes('homeowner') || questionText.includes('own a home') || questionText.includes('property owner')) {
+    if (va.isPropertyOwner !== undefined) return va.isPropertyOwner ? 'Yes' : 'No';
+  }
+
+  // Student status
+  if (questionText.includes('student') || questionText.includes('currently enrolled')) {
+    if (va.isStudent !== undefined) return va.isStudent ? 'Yes' : 'No';
+  }
+
+  return undefined;
+}
+
+/**
+ * Check if question can be answered from self-reported profile data
+ */
+function checkProfileData(
+  profile: UserProfile,
+  questionText: string
+): string | number | undefined {
+  const { demographics, professional, behavioral } = profile;
+
+  // Demographics
+  if (questionText.includes('gender')) {
+    if (demographics.gender) return demographics.gender;
+  }
+  if (questionText.includes('state') && demographics.state) {
+    return demographics.state;
+  }
+  if ((questionText.includes('age') || questionText.includes('how old')) && demographics.age) {
+    return demographics.age;
+  }
+
+  // Professional
+  if (questionText.includes('occupation') || questionText.includes('job') || questionText.includes('what do you do')) {
+    if (professional.occupation) return professional.occupation;
+  }
+  if (questionText.includes('industry') || questionText.includes('field')) {
+    if (professional.industry) return professional.industry;
+  }
+  if (questionText.includes('employment') || questionText.includes('employed')) {
+    if (professional.employmentStatus) return professional.employmentStatus;
+  }
+  if (questionText.includes('education') || questionText.includes('degree')) {
+    if (professional.education) return professional.education;
+  }
+  if (questionText.includes('income') || questionText.includes('salary')) {
+    if (professional.incomeRange) return professional.incomeRange;
+  }
+
+  // Behavioral
+  if (questionText.includes('political') && behavioral.politicalLeaning) {
+    return behavioral.politicalLeaning;
+  }
+  if (questionText.includes('tech savvy') || questionText.includes('technology')) {
+    if (behavioral.techSavviness) return behavioral.techSavviness;
+  }
+
+  return undefined;
+}
+
+/**
+ * Check if question can be answered from learned opinions
+ */
+function checkLearnedOpinions(
+  profile: UserProfile,
+  questionText: string,
+  options?: string[]
+): { answer: string; topic: string } | undefined {
+  const op = profile.opinions || {};
+
+  // Food & Dining
+  if (op.foodAndDining) {
+    if (questionText.includes('cuisine') || questionText.includes('type of food')) {
+      if (op.foodAndDining.favoriteCuisine) {
+        return { answer: op.foodAndDining.favoriteCuisine, topic: 'favorite cuisine' };
+      }
+    }
+    if (questionText.includes('restaurant')) {
+      if (op.foodAndDining.favoriteRestaurant) {
+        return { answer: op.foodAndDining.favoriteRestaurant, topic: 'favorite restaurant' };
+      }
+    }
+    if (questionText.includes('cook') || questionText.includes('cooking') || questionText.includes('eat out')) {
+      if (op.foodAndDining.cookingPreference) {
+        return { answer: op.foodAndDining.cookingPreference, topic: 'cooking preference' };
+      }
+    }
+    if (questionText.includes('diet') || questionText.includes('dietary')) {
+      if (op.foodAndDining.dietaryRestrictions) {
+        return { answer: op.foodAndDining.dietaryRestrictions, topic: 'dietary restrictions' };
+      }
+    }
+  }
+
+  // Politics & Policy
+  if (op.politicsAndPolicy) {
+    if (questionText.includes('healthcare') || questionText.includes('health care') || questionText.includes('va ')) {
+      if (op.politicsAndPolicy.healthcareStance) {
+        return { answer: op.politicsAndPolicy.healthcareStance, topic: 'healthcare stance' };
+      }
+    }
+    if (questionText.includes('immigra')) {
+      if (op.politicsAndPolicy.immigrationStance) {
+        return { answer: op.politicsAndPolicy.immigrationStance, topic: 'immigration stance' };
+      }
+    }
+    if (questionText.includes('econom') || questionText.includes('jobs') || questionText.includes('wage')) {
+      if (op.politicsAndPolicy.economyPriority) {
+        return { answer: op.politicsAndPolicy.economyPriority, topic: 'economy priority' };
+      }
+    }
+    if (questionText.includes('environment') || questionText.includes('climate')) {
+      if (op.politicsAndPolicy.environmentStance) {
+        return { answer: op.politicsAndPolicy.environmentStance, topic: 'environment stance' };
+      }
+    }
+  }
+
+  // Shopping & Brands
+  if (op.shoppingAndBrands) {
+    if (questionText.includes('grocery') || questionText.includes('groceries')) {
+      if (op.shoppingAndBrands.preferredGrocery) {
+        return { answer: op.shoppingAndBrands.preferredGrocery, topic: 'preferred grocery' };
+      }
+    }
+    if (questionText.includes('brand') || questionText.includes('favorite brand')) {
+      if (op.shoppingAndBrands.favoriteBrands) {
+        return { answer: op.shoppingAndBrands.favoriteBrands, topic: 'favorite brands' };
+      }
+    }
+    if (questionText.includes('shopping') && (questionText.includes('style') || questionText.includes('habit'))) {
+      if (op.shoppingAndBrands.shoppingStyle) {
+        return { answer: op.shoppingAndBrands.shoppingStyle, topic: 'shopping style' };
+      }
+    }
+  }
+
+  // Lifestyle
+  if (op.lifestyle) {
+    if (questionText.includes('exercise') || questionText.includes('workout') || questionText.includes('fitness')) {
+      if (op.lifestyle.exerciseHabits) {
+        return { answer: op.lifestyle.exerciseHabits, topic: 'exercise habits' };
+      }
+    }
+    if (questionText.includes('entertainment') || questionText.includes('free time') || questionText.includes('hobby')) {
+      if (op.lifestyle.entertainmentPreferences) {
+        return { answer: op.lifestyle.entertainmentPreferences, topic: 'entertainment preferences' };
+      }
+    }
+    if (questionText.includes('music')) {
+      if (op.lifestyle.musicPreferences) {
+        return { answer: op.lifestyle.musicPreferences, topic: 'music preferences' };
+      }
+    }
+    if (questionText.includes('travel')) {
+      if (op.lifestyle.travelPreferences) {
+        return { answer: op.lifestyle.travelPreferences, topic: 'travel preferences' };
+      }
+    }
+  }
+
+  // Check "other" opinions for keyword matches
+  if (op.other) {
+    for (const [topic, stance] of Object.entries(op.other)) {
+      if (stance && questionText.includes(topic.toLowerCase())) {
+        return { answer: stance, topic };
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Learn an opinion from a user's answer to a poll question
+ * This extracts the opinion/preference and stores it for future use
+ */
+export function learnOpinionFromAnswer(
+  profile: UserProfile,
+  question: PollQuestion,
+  answer: string | number | string[]
+): UserProfile {
+  const questionText = question.text.toLowerCase();
+  const answerStr = Array.isArray(answer) ? answer.join(', ') : String(answer);
+
+  // Determine which category this opinion belongs to
+  const opinion = categorizeOpinion(questionText, answerStr);
+
+  if (!opinion) {
+    // Could not categorize - store in "other"
+    const topic = extractTopicFromQuestion(question.text);
+    return updateProfile(profile, {
+      opinions: {
+        other: { [topic]: answerStr },
+      },
+    });
+  }
+
+  return updateProfile(profile, { opinions: opinion });
+}
+
+/**
+ * Categorize an opinion based on the question text
+ */
+function categorizeOpinion(questionText: string, answer: string): Partial<OpinionsProfile> | null {
+  // Food & Dining
+  if (questionText.includes('cuisine') || questionText.includes('type of food')) {
+    return { foodAndDining: { favoriteCuisine: answer } };
+  }
+  if (questionText.includes('restaurant')) {
+    return { foodAndDining: { favoriteRestaurant: answer } };
+  }
+  if (questionText.includes('cook') || questionText.includes('eat out') || questionText.includes('home cook')) {
+    return { foodAndDining: { cookingPreference: answer } };
+  }
+  if (questionText.includes('diet') || questionText.includes('dietary')) {
+    return { foodAndDining: { dietaryRestrictions: answer } };
+  }
+
+  // Politics & Policy
+  if (questionText.includes('healthcare') || questionText.includes('health care') || questionText.includes('va benefit') || questionText.includes('va budget')) {
+    return { politicsAndPolicy: { healthcareStance: answer } };
+  }
+  if (questionText.includes('immigra')) {
+    return { politicsAndPolicy: { immigrationStance: answer } };
+  }
+  if (questionText.includes('econom') || questionText.includes('jobs') || questionText.includes('wage') || questionText.includes('minimum wage')) {
+    return { politicsAndPolicy: { economyPriority: answer } };
+  }
+  if (questionText.includes('environment') || questionText.includes('climate') || questionText.includes('green energy')) {
+    return { politicsAndPolicy: { environmentStance: answer } };
+  }
+  if (questionText.includes('education') && (questionText.includes('policy') || questionText.includes('fund') || questionText.includes('support'))) {
+    return { politicsAndPolicy: { educationStance: answer } };
+  }
+
+  // Shopping & Brands
+  if (questionText.includes('grocery') || questionText.includes('groceries') || questionText.includes('supermarket')) {
+    return { shoppingAndBrands: { preferredGrocery: answer } };
+  }
+  if (questionText.includes('brand') && (questionText.includes('favorite') || questionText.includes('prefer'))) {
+    return { shoppingAndBrands: { favoriteBrands: answer } };
+  }
+  if (questionText.includes('shopping') && (questionText.includes('style') || questionText.includes('habit') || questionText.includes('budget'))) {
+    return { shoppingAndBrands: { shoppingStyle: answer } };
+  }
+
+  // Lifestyle
+  if (questionText.includes('exercise') || questionText.includes('workout') || questionText.includes('fitness') || questionText.includes('gym')) {
+    return { lifestyle: { exerciseHabits: answer } };
+  }
+  if (questionText.includes('entertainment') || questionText.includes('free time') || questionText.includes('hobby') || questionText.includes('watch')) {
+    return { lifestyle: { entertainmentPreferences: answer } };
+  }
+  if (questionText.includes('music') || questionText.includes('genre') || questionText.includes('listen to')) {
+    return { lifestyle: { musicPreferences: answer } };
+  }
+  if (questionText.includes('travel') || questionText.includes('vacation') || questionText.includes('destination')) {
+    return { lifestyle: { travelPreferences: answer } };
+  }
+
+  return null;
+}
+
+/**
+ * Extract a topic from a question for storage in "other"
+ */
+function extractTopicFromQuestion(questionText: string): string {
+  // Remove common question words and clean up
+  return questionText
+    .replace(/^(what|how|do you|would you|are you|have you|did you|will you|can you|should|which|where|when|why)\s*/i, '')
+    .replace(/[?.,!]/g, '')
+    .trim()
+    .substring(0, 50); // Limit length
+}
+
+/**
+ * Get questions that need user input for a poll
+ * Returns questions that cannot be auto-answered
+ */
+export function getQuestionsNeedingInput(
+  profile: UserProfile,
+  questions: PollQuestion[]
+): PollQuestion[] {
+  return questions.filter((q) => {
+    const classification = classifyQuestion(profile, q);
+    return !classification.canAutoAnswer && q.required;
+  });
+}
+
+/**
+ * Generate responses for a poll, marking which need user input
+ */
+export function generatePollResponses(
+  profile: UserProfile,
+  questions: PollQuestion[]
+): {
+  autoAnswers: Array<{ questionId: string; answer: string | number | string[]; confidence: AnswerConfidenceLevel; source: AnswerSource }>;
+  needsInput: PollQuestion[];
+} {
+  const autoAnswers: Array<{ questionId: string; answer: string | number | string[]; confidence: AnswerConfidenceLevel; source: AnswerSource }> = [];
+  const needsInput: PollQuestion[] = [];
+
+  for (const question of questions) {
+    const classification = classifyQuestion(profile, question);
+
+    if (classification.canAutoAnswer && classification.answer !== undefined) {
+      autoAnswers.push({
+        questionId: question.id,
+        answer: classification.answer,
+        confidence: classification.confidence,
+        source: classification.source,
+      });
+    } else if (question.required) {
+      needsInput.push(question);
+    }
+  }
+
+  return { autoAnswers, needsInput };
+}
+
 /**
  * Profile Manager class for stateful profile operations
  */
@@ -958,10 +1634,15 @@ export class ProfileManager {
   }
 
   /**
-   * Create a new profile with the given ID
+   * Create a new profile
+   *
+   * @param displayName - Optional display name for the profile
+   *
+   * Note: No wallet address is required. The agent's Agentic Wallet
+   * is provisioned automatically and linked to the profile later.
    */
-  create(id: string, displayName?: string): UserProfile {
-    this.profile = createEmptyProfile(id, displayName);
+  create(displayName?: string): UserProfile {
+    this.profile = createEmptyProfile(displayName);
     return this.profile;
   }
 
@@ -973,6 +1654,7 @@ export class ProfileManager {
       demographics: Partial<DemographicProfile>;
       professional: Partial<ProfessionalProfile>;
       behavioral: Partial<BehavioralProfile>;
+      opinions: Partial<OpinionsProfile>;
       verifiedAttributes: Partial<VerifiedAttributes>;
       preferences: Partial<UserPreferences>;
     }>
@@ -1028,5 +1710,56 @@ export class ProfileManager {
   getCompleteness(): number {
     if (!this.profile) return 0;
     return getProfileCompleteness(this.profile);
+  }
+
+  /**
+   * Classify a poll question to determine how to answer it
+   */
+  classifyQuestion(question: PollQuestion): QuestionClassification | null {
+    if (!this.profile) return null;
+    return classifyQuestion(this.profile, question);
+  }
+
+  /**
+   * Learn an opinion from a user's answer
+   */
+  learnFromAnswer(question: PollQuestion, answer: string | number | string[]): void {
+    if (!this.profile) {
+      throw new Error('No profile loaded');
+    }
+    this.profile = learnOpinionFromAnswer(this.profile, question, answer);
+  }
+
+  /**
+   * Get questions that need user input for a poll
+   */
+  getQuestionsNeedingInput(questions: PollQuestion[]): PollQuestion[] {
+    if (!this.profile) return questions;
+    return getQuestionsNeedingInput(this.profile, questions);
+  }
+
+  /**
+   * Generate poll responses with classification
+   */
+  generateResponses(questions: PollQuestion[]): ReturnType<typeof generatePollResponses> | null {
+    if (!this.profile) return null;
+    return generatePollResponses(this.profile, questions);
+  }
+
+  /**
+   * Get the opinions section
+   */
+  getOpinions(): OpinionsProfile | null {
+    return this.profile?.opinions || null;
+  }
+
+  /**
+   * Update opinions directly
+   */
+  updateOpinions(opinions: Partial<OpinionsProfile>): void {
+    if (!this.profile) {
+      throw new Error('No profile loaded');
+    }
+    this.profile = updateProfile(this.profile, { opinions });
   }
 }

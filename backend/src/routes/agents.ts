@@ -128,21 +128,30 @@ agents.get("/profile/attestations", requireAuth, async (c) => {
  */
 function matchesCriteria(
   criteria: PollCriteria,
-  attributes: Partial<VerifiedAttributes>
+  attributes: Partial<VerifiedAttributes> & {
+    // Self-reported fallbacks
+    state?: string;
+    age?: number;
+    occupation?: string;
+  }
 ): { matches: boolean; reasons: string[] } {
   const reasons: string[] = [];
 
+  // Get effective values (verified takes precedence over self-reported)
+  const effectiveAge = attributes.verifiedAge ?? attributes.age;
+  const effectiveState = attributes.verifiedState ?? attributes.state;
+
   // Check age range
-  if (criteria.minAge && (!attributes.age || attributes.age < criteria.minAge)) {
+  if (criteria.minAge && (!effectiveAge || effectiveAge < criteria.minAge)) {
     reasons.push(`Minimum age ${criteria.minAge} required`);
   }
-  if (criteria.maxAge && (!attributes.age || attributes.age > criteria.maxAge)) {
+  if (criteria.maxAge && (!effectiveAge || effectiveAge > criteria.maxAge)) {
     reasons.push(`Maximum age ${criteria.maxAge} required`);
   }
 
-  // Check state
+  // Check state (verified or self-reported)
   if (criteria.states && criteria.states.length > 0) {
-    if (!attributes.state || !criteria.states.includes(attributes.state)) {
+    if (!effectiveState || !criteria.states.includes(effectiveState)) {
       reasons.push(`Must be in states: ${criteria.states.join(", ")}`);
     }
   }
@@ -155,6 +164,11 @@ function matchesCriteria(
   // Check voter registration
   if (criteria.isRegisteredVoter === true && attributes.isRegisteredVoter !== true) {
     reasons.push("Must be a registered voter");
+  }
+
+  // Check property owner
+  if (criteria.isPropertyOwner === true && attributes.isPropertyOwner !== true) {
+    reasons.push("Must be a verified property owner");
   }
 
   // Check occupation

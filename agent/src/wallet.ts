@@ -14,6 +14,10 @@ import type {
   EarningsSummary,
   Payout,
   AgentConfig,
+  WithdrawalRequest,
+  WithdrawalResult,
+  WithdrawalHistory,
+  Withdrawal,
 } from './types.js';
 import { USDC_CONTRACT_ADDRESS } from './config.js';
 
@@ -223,6 +227,129 @@ export async function getEarningsHistory(
 }
 
 /**
+ * Request a withdrawal from the agent wallet
+ */
+export async function requestWithdrawal(
+  config: AgentConfig,
+  authToken: string,
+  request: WithdrawalRequest
+): Promise<WithdrawalResult> {
+  const url = `${config.apiBaseUrl}/agent/withdraw`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
+    },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(`Withdrawal failed: ${response.status} - ${errorData.error || 'Unknown error'}`);
+  }
+
+  return response.json() as Promise<WithdrawalResult>;
+}
+
+/**
+ * Get withdrawal history from the API
+ */
+export async function getWithdrawalHistory(
+  config: AgentConfig,
+  authToken: string
+): Promise<WithdrawalHistory> {
+  const url = `${config.apiBaseUrl}/agent/withdraw/history`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to get withdrawal history: ${response.status} ${errorText}`);
+  }
+
+  return response.json() as Promise<WithdrawalHistory>;
+}
+
+/**
+ * Get wallet balance from the API (includes USDC balance check)
+ */
+export async function getWalletBalanceFromApi(
+  config: AgentConfig,
+  authToken: string
+): Promise<{ walletAddress: string; balance: string; currency: string; network: string }> {
+  const url = `${config.apiBaseUrl}/agent/withdraw/balance`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to get balance: ${response.status} ${errorText}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Format withdrawal into a human-readable string
+ */
+export function formatWithdrawal(withdrawal: Withdrawal): string {
+  const amount = parseFloat(withdrawal.amount).toFixed(2);
+  const status = withdrawal.status;
+  const destination = withdrawal.destinationType === 'wallet'
+    ? `${withdrawal.destinationAddress.slice(0, 10)}...`
+    : `${withdrawal.destinationType} (${withdrawal.destinationHandle || withdrawal.destinationAddress.slice(0, 10)}...)`;
+
+  let result = `$${amount} USDC → ${destination} [${status}]`;
+
+  if (withdrawal.txHash) {
+    result += `\n  TX: ${withdrawal.txHash.slice(0, 20)}...`;
+  }
+  if (withdrawal.errorMessage) {
+    result += `\n  Error: ${withdrawal.errorMessage}`;
+  }
+
+  return result;
+}
+
+/**
+ * Format withdrawal history into a human-readable summary
+ */
+export function formatWithdrawalHistory(history: WithdrawalHistory): string {
+  const lines: string[] = [];
+
+  lines.push('=== Withdrawal History ===');
+
+  if (history.withdrawals.length === 0) {
+    lines.push('No withdrawals yet.');
+    return lines.join('\n');
+  }
+
+  for (const w of history.withdrawals.slice(0, 10)) {
+    lines.push(formatWithdrawal(w));
+  }
+
+  if (history.withdrawals.length > 10) {
+    lines.push(`... and ${history.withdrawals.length - 10} more`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Format earnings into a human-readable summary
  */
 export function formatEarnings(earnings: EarningsSummary): string {
@@ -427,5 +554,46 @@ export class WalletManager {
       createdAt: this.walletData.createdAt,
       hasPrivateKey: !!this.walletData.privateKey,
     };
+  }
+
+  /**
+   * Request a withdrawal to a destination address
+   */
+  async withdraw(request: WithdrawalRequest): Promise<WithdrawalResult> {
+    if (!this.authToken) {
+      throw new Error('Auth token not set');
+    }
+
+    return requestWithdrawal(this.config, this.authToken, request);
+  }
+
+  /**
+   * Get withdrawal history
+   */
+  async getWithdrawalHistory(): Promise<WithdrawalHistory> {
+    if (!this.authToken) {
+      throw new Error('Auth token not set');
+    }
+
+    return getWithdrawalHistory(this.config, this.authToken);
+  }
+
+  /**
+   * Get wallet balance from API
+   */
+  async getApiBalance(): Promise<{ walletAddress: string; balance: string; currency: string; network: string }> {
+    if (!this.authToken) {
+      throw new Error('Auth token not set');
+    }
+
+    return getWalletBalanceFromApi(this.config, this.authToken);
+  }
+
+  /**
+   * Format withdrawal history
+   */
+  async formatWithdrawalHistory(): Promise<string> {
+    const history = await this.getWithdrawalHistory();
+    return formatWithdrawalHistory(history);
   }
 }
