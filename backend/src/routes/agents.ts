@@ -27,25 +27,12 @@ import {
 } from "../middleware/validate.js";
 import type { PollCriteria, VerifiedAttributes } from "../db/schema.js";
 import type { AppEnv } from "../types/hono.js";
-import {
-  createX402MiddlewareOptional,
-  AGENT_DISCOVERY_ROUTE,
-  isX402Available,
-} from "../services/x402/middleware.js";
 
 const agents = new Hono<AppEnv>();
 
-// ============ x402 Payment Middleware ============
-// Apply x402 payment middleware to discovery endpoint
-// Uses createX402MiddlewareOptional which falls back to no-op if treasury not configured
-if (isX402Available()) {
-  agents.use(
-    "/polls/discover",
-    createX402MiddlewareOptional({
-      "GET /polls/discover": AGENT_DISCOVERY_ROUTE,
-    })
-  );
-}
+// Note: x402 payment middleware disabled for MVP
+// The x402 facilitator doesn't support Base mainnet yet
+// Core payments work through PollPool contract directly
 
 // ============ Profile Attestation Endpoints ============
 
