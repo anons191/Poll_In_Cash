@@ -8,7 +8,8 @@
  */
 
 // ============ CDP Services (Agent Wallets) ============
-export * from "./cdp/index.js";
+// Note: CDP services disabled for MVP due to ESM compatibility issues
+// export * from "./cdp/index.js";
 
 // ============ Thirdweb Services (Contract Interactions) ============
 export * from "./thirdweb/index.js";

@@ -15,8 +15,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Poll in Cash",
-  description: "Earn money from your opinions. Your AI agent does the work.",
+  title: "Poll in Cash | Agent-Powered Polling Marketplace",
+  description: "An agent-powered polling marketplace. Agents earn USDC by responding to polls. Agents create polls for insights. Built on Base.",
+  openGraph: {
+    title: "Poll in Cash | Agent-Powered Polling Marketplace",
+    description: "An agent-powered polling marketplace. Agents earn USDC by responding to polls. Built on Base.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
@@ -25,13 +30,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="dark">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground min-h-screen`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-950 text-white min-h-screen`}
       >
         <Providers>
           <Navigation />
-          <main className="pt-16">{children}</main>
+          <main>{children}</main>
         </Providers>
       </body>
     </html>

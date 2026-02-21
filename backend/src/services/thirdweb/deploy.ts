@@ -15,7 +15,7 @@ import * as path from "path";
 
 // Import the PollPool ABI and bytecode using require for JSON
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const PollPoolArtifact = require("../../../../contracts/artifacts/src/PollPool.sol/PollPool.json");
+const PollPoolArtifact = require("../../contracts/PollPool.json");
 
 // ============ Types ============
 

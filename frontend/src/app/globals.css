@@ -128,16 +128,6 @@ body {
   overflow: hidden;
 }
 
-/* Recharts dark mode support */
-.dark .recharts-cartesian-grid-horizontal line,
-.dark .recharts-cartesian-grid-vertical line {
-  stroke: var(--muted);
-}
-
-.dark .recharts-text {
-  fill: var(--muted-foreground);
-}
-
 /* Focus visible styles */
 :focus-visible {
   outline: 2px solid var(--primary);

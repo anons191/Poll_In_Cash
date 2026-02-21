@@ -8,19 +8,22 @@ import {
   formatUnits,
   parseUnits,
   isAddress,
+  type Chain,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { base, baseSepolia } from "viem/chains";
 import { db } from "../db/index.js";
 import { withdrawals, type NewWithdrawal } from "../db/schema.js";
 import { requireAuth, getUser } from "../middleware/auth.js";
 import type { AppEnv } from "../types/hono.js";
+import { USDC_ADDRESS, isMainnet, RPC_URL, EXPLORER_URL, CHAIN_NAME } from "../config/chain.js";
 
 const withdrawalsRouter = new Hono<AppEnv>();
 
 // ============ Configuration ============
 
-const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
+// Chain config from unified chain.ts
+const chain: Chain = isMainnet ? base : baseSepolia;
 const BRIDGE_WALLET = process.env.BRIDGE_WALLET_ADDRESS || "0x495721378c27a51a2bd7f176bad570d5148c88d5";
 const MIN_WITHDRAWAL = 0.5; // 0.50 USDC minimum
 
@@ -48,8 +51,8 @@ const USDC_ABI = [
 
 function getPublicClient() {
   return createPublicClient({
-    chain: baseSepolia,
-    transport: http(),
+    chain,
+    transport: http(RPC_URL),
   });
 }
 
@@ -57,8 +60,8 @@ async function getAgentWalletClient(agentPrivateKey: string) {
   const account = privateKeyToAccount(agentPrivateKey as `0x${string}`);
   return createWalletClient({
     account,
-    chain: baseSepolia,
-    transport: http(),
+    chain,
+    transport: http(RPC_URL),
   });
 }
 
@@ -107,7 +110,7 @@ withdrawalsRouter.get("/balance", requireAuth, async (c) => {
       walletAddress: user.walletAddress,
       balance,
       currency: "USDC",
-      network: "base-sepolia",
+      network: CHAIN_NAME,
     });
   } catch (error) {
     console.error("Error fetching balance:", error);
@@ -230,7 +233,7 @@ withdrawalsRouter.post("/", requireAuth, async (c) => {
         },
         previousBalance: currentBalance,
         newBalance,
-        explorerUrl: `https://sepolia.basescan.org/tx/${txHash}`,
+        explorerUrl: `${EXPLORER_URL}/tx/${txHash}`,
       });
     } else {
       // Transaction failed

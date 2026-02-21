@@ -21,12 +21,28 @@ export const CHAIN_ID = 84532;
 /**
  * PollPool contract address from environment variable
  */
-export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_POLLPOOL_ADDRESS || "";
+export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_POLLPOOL_CONTRACT_ADDRESS || "";
 
 /**
- * USDC contract address on Base Sepolia
+ * Chain environment - "mainnet" or "testnet"
  */
-export const USDC_ADDRESS = "0x036cbd53842c5426634e7929541ec2318f3dcf7e" as const;
+export const CHAIN_ENV = process.env.NEXT_PUBLIC_CHAIN_ENV || "testnet";
+
+/**
+ * BaseScan URL based on chain environment
+ */
+export const BASESCAN_URL = CHAIN_ENV === "mainnet"
+  ? "https://basescan.org"
+  : "https://sepolia.basescan.org";
+
+/**
+ * USDC contract address (varies by network)
+ * Testnet: 0x036CbD53842c5426634e7929541eC2318f3dCF7e
+ * Mainnet: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+ */
+export const USDC_ADDRESS = CHAIN_ENV === "mainnet"
+  ? "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+  : "0x036cbd53842c5426634e7929541ec2318f3dcf7e" as const;
 
 /**
  * USDC decimals (standard for USDC)

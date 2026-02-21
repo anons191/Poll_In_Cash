@@ -7,6 +7,7 @@ import {
   getAgentProfile,
   getPlatformStats,
   getPublicActivity,
+  getPublicRecentPayouts,
 } from "../db/queries.js";
 import { requireAuth, getUser } from "../middleware/auth.js";
 import type { AppEnv } from "../types/hono.js";
@@ -44,6 +45,20 @@ dashboard.get("/public-activity", async (c) => {
   } catch (error) {
     console.error("Error fetching public activity:", error);
     return c.json({ activities: [] });
+  }
+});
+
+/**
+ * GET /dashboard/recent-payouts
+ * Public list of recent confirmed payouts for landing page (no auth required)
+ */
+dashboard.get("/recent-payouts", async (c) => {
+  try {
+    const payouts = await getPublicRecentPayouts(10);
+    return c.json({ payouts });
+  } catch (error) {
+    console.error("Error fetching recent payouts:", error);
+    return c.json({ payouts: [] });
   }
 });
 

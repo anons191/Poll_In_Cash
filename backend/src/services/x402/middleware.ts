@@ -16,14 +16,31 @@ import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { HTTPFacilitatorClient } from "@x402/core/server";
 import {
-  getX402TreasuryConfig,
-  isTreasuryConfigured,
-} from "../cdp/treasury.js";
-import {
   CHAIN_IDS,
   SUPPORTED_NETWORKS,
   type WalletAddress,
 } from "../../types/wallet.js";
+
+/** CAIP-2 chain identifier type */
+type Caip2ChainId = `${string}:${string}`;
+
+// Stub treasury functions for MVP (avoids CDP SDK ESM issues)
+function isTreasuryConfigured(): boolean {
+  return !!process.env.TREASURY_WALLET_ADDRESS;
+}
+
+function getX402TreasuryConfig() {
+  const address = process.env.TREASURY_WALLET_ADDRESS;
+  if (!address) {
+    throw new Error("TREASURY_WALLET_ADDRESS not configured");
+  }
+  // Use CAIP-2 format for x402 compatibility
+  const chainId = process.env.NODE_ENV === "production" ? 8453 : 84532;
+  return {
+    payTo: address as WalletAddress,
+    network: `eip155:${chainId}` as Caip2ChainId,
+  };
+}
 
 // ============ Configuration Types ============
 
@@ -68,9 +85,6 @@ export interface X402MiddlewareOptions {
 
 /** Default facilitator URL - Coinbase x402 facilitator that supports Base Sepolia */
 const DEFAULT_FACILITATOR_URL = "https://www.x402.org/facilitator";
-
-/** CAIP-2 chain identifier type */
-type Caip2ChainId = `${string}:${string}`;
 
 /**
  * Get the CAIP-2 network identifier for x402

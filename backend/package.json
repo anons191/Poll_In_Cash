@@ -24,6 +24,9 @@
   ],
   "author": "",
   "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
     "@coinbase/agentkit": "^0.10.4",
     "@coinbase/cdp-sdk": "^1.44.1",

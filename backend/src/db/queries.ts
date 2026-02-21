@@ -486,29 +486,107 @@ export async function getPlatformStats() {
 
 /**
  * Get recent public activity for landing page
+ * Combines: new polls, and real confirmed payouts
  */
 export async function getPublicActivity(limit = 10) {
-  // Get recently created/active polls
-  const recentActivity = await db
+  // Get recently created active polls
+  const recentPolls = await db
     .select({
       id: polls.id,
       title: polls.title,
-      status: polls.status,
-      participantCap: polls.participantCap,
       cashPoolUsdc: polls.cashPoolUsdc,
       createdAt: polls.createdAt,
     })
     .from(polls)
-    .where(sql`status IN ('active', 'closed', 'distributed')`)
+    .where(eq(polls.status, "active"))
     .orderBy(desc(polls.createdAt))
     .limit(limit);
 
-  return recentActivity.map((poll) => ({
-    id: poll.id,
-    type: poll.status === "active" ? "poll_active" : "poll_completed",
-    title: poll.title,
-    participants: poll.participantCap,
-    amount: poll.cashPoolUsdc,
-    timestamp: poll.createdAt?.toISOString() ?? new Date().toISOString(),
+  // Get recent confirmed payouts
+  const recentPayouts = await db
+    .select({
+      id: payouts.id,
+      recipientWallet: payouts.recipientWallet,
+      amountUsdc: payouts.amountUsdc,
+      distributedAt: payouts.distributedAt,
+      pollTitle: polls.title,
+    })
+    .from(payouts)
+    .leftJoin(polls, eq(payouts.pollId, polls.id))
+    .where(eq(payouts.status, "confirmed"))
+    .orderBy(desc(payouts.distributedAt))
+    .limit(limit);
+
+  // Combine and format activities
+  type ActivityItem = {
+    id: string;
+    type: "new_poll" | "payout";
+    title: string;
+    amount: string;
+    walletAddress?: string;
+    timestamp: string;
+  };
+
+  const activities: ActivityItem[] = [];
+
+  // Add polls as "new_poll" activities
+  for (const poll of recentPolls) {
+    activities.push({
+      id: poll.id,
+      type: "new_poll",
+      title: poll.title,
+      amount: poll.cashPoolUsdc,
+      timestamp: poll.createdAt?.toISOString() ?? new Date().toISOString(),
+    });
+  }
+
+  // Add payouts as "payout" activities
+  for (const payout of recentPayouts) {
+    activities.push({
+      id: payout.id,
+      type: "payout",
+      title: payout.pollTitle ?? "Poll",
+      amount: payout.amountUsdc,
+      walletAddress: payout.recipientWallet,
+      timestamp: payout.distributedAt?.toISOString() ?? new Date().toISOString(),
+    });
+  }
+
+  // Sort by timestamp descending and return top N
+  activities.sort((a, b) =>
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+
+  return activities.slice(0, limit);
+}
+
+/**
+ * Get recent confirmed payouts (public, no auth required)
+ * Returns payouts with confirmed status for landing page display
+ */
+export async function getPublicRecentPayouts(limit = 10) {
+  const recentPayouts = await db
+    .select({
+      id: payouts.id,
+      recipientWallet: payouts.recipientWallet,
+      amountUsdc: payouts.amountUsdc,
+      txHash: payouts.txHash,
+      distributedAt: payouts.distributedAt,
+      pollId: payouts.pollId,
+      pollTitle: polls.title,
+    })
+    .from(payouts)
+    .leftJoin(polls, eq(payouts.pollId, polls.id))
+    .where(eq(payouts.status, "confirmed"))
+    .orderBy(desc(payouts.distributedAt))
+    .limit(limit);
+
+  return recentPayouts.map((payout) => ({
+    id: payout.id,
+    agentAddress: payout.recipientWallet,
+    amount: payout.amountUsdc,
+    pollTitle: payout.pollTitle ?? "Unknown Poll",
+    txHash: payout.txHash ?? "",
+    timestamp: payout.distributedAt?.toISOString() ?? new Date().toISOString(),
   }));
 }

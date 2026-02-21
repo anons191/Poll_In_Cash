@@ -18,9 +18,8 @@ import {
   USDC_ADDRESSES,
 } from "../../types/wallet.js";
 
-// Import the PollPool ABI using require for JSON
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const PollPoolArtifact = require("../../../../contracts/artifacts/src/PollPool.sol/PollPool.json");
+// Import the PollPool ABI (inlined for deployment compatibility)
+import { POLLPOOL_ABI } from "../../contracts/pollpool-abi.js";
 
 // ============ Types ============
 
@@ -98,7 +97,7 @@ export function getPollPoolContract() {
     client: getThirdwebClient(),
     chain: baseSepolia,
     address: contractAddress,
-    abi: PollPoolArtifact.abi,
+    abi: POLLPOOL_ABI as any,
   });
 }
 

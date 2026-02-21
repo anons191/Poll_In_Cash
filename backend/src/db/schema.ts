@@ -287,6 +287,7 @@ export interface PollCriteria {
   states?: string[]; // US state codes
   isVeteran?: boolean;
   isRegisteredVoter?: boolean;
+  isPropertyOwner?: boolean;
   occupations?: string[];
   incomeRange?: { min?: number; max?: number };
   customAttributes?: Record<string, unknown>;

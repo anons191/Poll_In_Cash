@@ -34,6 +34,39 @@ import {
 const polls = new Hono<AppEnv>();
 
 /**
+ * GET /polls/public
+ * List active public polls (no auth required)
+ * For landing page display
+ */
+polls.get("/public", async (c) => {
+  try {
+    const limit = parseInt(c.req.query("limit") || "50");
+    const pollsList = await getDiscoverablePolls({ limit });
+
+    // Add response counts
+    const pollsWithDetails = await Promise.all(
+      pollsList.map(async (poll) => ({
+        id: poll.id,
+        title: poll.title,
+        description: poll.description,
+        totalFunded: poll.cashPoolUsdc,
+        participantCap: poll.participantCap,
+        participantCount: await getResponseCount(poll.id),
+        status: poll.status,
+        criteria: poll.criteria,
+        expiresAt: poll.expiresAt?.toISOString() ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        createdAt: poll.createdAt.toISOString(),
+      }))
+    );
+
+    return c.json(pollsWithDetails);
+  } catch (error) {
+    console.error("Error fetching public polls:", error);
+    return c.json([]);
+  }
+});
+
+/**
  * POST /polls
  * Create a new poll (draft status)
  * Requires authentication

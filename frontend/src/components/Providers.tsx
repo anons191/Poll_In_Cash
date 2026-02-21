@@ -2,21 +2,15 @@
 
 /**
  * Providers Component
- * Wraps the application with necessary context providers
+ * Minimal wrapper - no wallet providers needed for spectator-only frontend
  */
-
-import { ThirdwebProvider } from "thirdweb/react";
 
 interface ProvidersProps {
   children: React.ReactNode;
 }
 
 export function Providers({ children }: ProvidersProps) {
-  return (
-    <ThirdwebProvider>
-      {children}
-    </ThirdwebProvider>
-  );
+  return <>{children}</>;
 }
 
 export default Providers;

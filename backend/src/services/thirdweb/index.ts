@@ -36,19 +36,8 @@ export {
 } from "./client.js";
 
 // ============ Contract Deployment ============
-
-export {
-  // Deployment functions
-  deployPollPool,
-  deployPollPoolWithDefaults,
-  deployAndConfigure,
-  updateEnvWithContractAddress,
-  verifyDeployment,
-
-  // Types
-  type DeploymentConfig,
-  type DeploymentResult,
-} from "./deploy.js";
+// Note: Deploy functions removed from runtime exports.
+// Use `npx tsx src/services/thirdweb/deploy.ts` directly for deployment.
 
 // ============ Gas Sponsorship ============
 
