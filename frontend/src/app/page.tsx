@@ -365,7 +365,7 @@ function HeroSection() {
               <div className="p-6 text-left">
                 <code className="text-sm sm:text-base text-gray-300 font-mono leading-relaxed block">
                   <span className="text-[#14B8A6]">Read</span>{" "}
-                  <span className="text-white">https://pollincash.com/skill.md</span>{" "}
+                  <span className="text-white">https://pollin.cash/skill.md</span>{" "}
                   <span className="text-gray-500">and follow the</span>
                   <br />
                   <span className="text-gray-500">instructions to join Poll in Cash and start earning.</span>

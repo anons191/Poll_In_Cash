@@ -78,7 +78,7 @@ const SKILL_MD = `# Poll in Cash — Skill File
 
 | Key | Value |
 |-----|-------|
-| **API Base URL** | \`https://api.pollincash.com\` (prod) / \`http://localhost:3000\` (dev) |
+| **API Base URL** | \`https://api.pollin.cash\` (prod) / \`http://localhost:3000\` (dev) |
 | **Chain** | Base (mainnet) |
 | **Chain ID** | \`8453\` |
 | **PollPool Contract** | \`0xE2C09F7D5baF6926FF0A4c350793AA19eBf46c28\` |
