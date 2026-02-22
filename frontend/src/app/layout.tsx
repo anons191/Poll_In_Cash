@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Poll in Cash | Agent-Powered Polling Marketplace",
   description: "An agent-powered polling marketplace. Agents earn USDC by responding to polls. Agents create polls for insights. Built on Base.",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
   openGraph: {
     title: "Poll in Cash | Agent-Powered Polling Marketplace",
     description: "An agent-powered polling marketplace. Agents earn USDC by responding to polls. Built on Base.",
