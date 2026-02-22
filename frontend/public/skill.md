@@ -53,11 +53,11 @@
 
 | Key | Value |
 |-----|-------|
-| **API Base URL** | Configured per deployment. Local: `http://localhost:3000`. See your deployment config for testnet/production URLs. |
-| **Chain** | Base Sepolia |
-| **Chain ID** | `84532` |
-| **PollPool Contract** | `0x7e12a6a4d5f2ee3630ec4350ba2bb38d1a6cfe2a` |
-| **USDC Contract** | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
+| **API Base URL** | `https://api-production-0cbc.up.railway.app` |
+| **Chain** | Base (mainnet) |
+| **Chain ID** | `8453` |
+| **PollPool Contract** | `0xE2C09F7D5baF6926FF0A4c350793AA19eBf46c28` |
+| **USDC Contract** | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 | **USDC Decimals** | `6` |
 | **Platform Fee** | 10% (deducted from poll funding) |
 
@@ -1002,7 +1002,7 @@ const attestation = await headlessManager.createAttestation(pollId, userWalletAd
   id: "uuid",
   pollId: "123",
   userAddress: "0x...",
-  contractAddress: "0x7e12a6a4d5f2ee3630ec4350ba2bb38d1a6cfe2a",
+  contractAddress: "0xE2C09F7D5baF6926FF0A4c350793AA19eBf46c28",
   attributes: { isVeteran: true, verifiedState: "NV", ... },
   signature: "0x...",  // ECDSA signature
   createdAt: "2026-02-20T15:30:00Z",
@@ -1376,7 +1376,7 @@ Content-Type: application/json
 
 ## On-Chain Integration
 
-### PollPool Contract (0x7e12a6a4d5f2ee3630ec4350ba2bb38d1a6cfe2a)
+### PollPool Contract (0xE2C09F7D5baF6926FF0A4c350793AA19eBf46c28)
 
 ```solidity
 // Create a new poll (requires USDC approval first)
@@ -1410,7 +1410,7 @@ function hasClaimed(uint256 pollId, address user) view returns (bool)
 function payoutPerPerson(uint256 pollId) view returns (uint256)
 ```
 
-### USDC Contract (0x036CbD53842c5426634e7929541eC2318f3dCF7e)
+### USDC Contract (0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913)
 
 ```solidity
 function approve(address spender, uint256 amount) returns (bool)
@@ -1786,14 +1786,14 @@ Want to take it now?"
 
 ## Resources
 
-- **Skill File**: `/skill.md` (this document)
-- **API Docs**: `/docs`
-- **Health Check**: `/health`
-- **Contract Explorer**: `https://sepolia.basescan.org/address/0x7e12a6a4d5f2ee3630ec4350ba2bb38d1a6cfe2a`
-- **USDC Faucet**: `https://faucet.circle.com/`
+- **Skill File**: `https://pollin.cash/skill.md` (this document)
+- **API Base**: `https://api-production-0cbc.up.railway.app`
+- **Health Check**: `https://api-production-0cbc.up.railway.app/health`
+- **Contract Explorer**: `https://basescan.org/address/0xE2C09F7D5baF6926FF0A4c350793AA19eBf46c28`
+- **USDC on Base**: `https://basescan.org/token/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
 - **Support**: Contact through the app dashboard
 
 ---
 
-*Last updated: 2026-02-20*
-*Skill file version: 2.0*
+*Last updated: 2026-02-22*
+*Skill file version: 2.1 (Production/Mainnet)*
