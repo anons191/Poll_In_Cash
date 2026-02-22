@@ -1,10 +1,12 @@
 /**
  * Thirdweb client and contract interaction helpers
  * Server-side Thirdweb client for PollPool contract interactions
+ *
+ * Uses dynamic chain configuration from config/chain.ts to support
+ * both testnet (Base Sepolia) and mainnet (Base) deployments.
  */
 
-import { createThirdwebClient, getContract, readContract, prepareContractCall, sendTransaction } from "thirdweb";
-import { baseSepolia } from "thirdweb/chains";
+import { createThirdwebClient, getContract, readContract, prepareContractCall, sendTransaction, defineChain } from "thirdweb";
 import { privateKeyToAccount } from "thirdweb/wallets";
 import type {
   WalletAddress,
@@ -14,9 +16,18 @@ import type {
 import {
   toWalletAddress,
   toTransactionHash,
-  CHAIN_IDS,
-  USDC_ADDRESSES,
 } from "../../types/wallet.js";
+
+// Import dynamic chain configuration
+import {
+  CHAIN_ID,
+  CHAIN_NAME,
+  RPC_URL,
+  EXPLORER_URL,
+  USDC_ADDRESS,
+  POLLPOOL_ADDRESS,
+  isMainnet,
+} from "../../config/chain.js";
 
 // Import the PollPool ABI (inlined for deployment compatibility)
 import { POLLPOOL_ABI } from "../../contracts/pollpool-abi.js";
@@ -78,35 +89,62 @@ export function getThirdwebClient() {
 }
 
 /**
- * Get the Base Sepolia chain configuration
+ * Dynamic chain configuration based on CHAIN_ENV
+ * Uses defineChain to create a chain object compatible with thirdweb
+ */
+let _chain: ReturnType<typeof defineChain> | null = null;
+
+export function getChain() {
+  if (!_chain) {
+    _chain = defineChain({
+      id: CHAIN_ID,
+      name: CHAIN_NAME,
+      rpc: RPC_URL,
+      nativeCurrency: {
+        name: "Ether",
+        symbol: "ETH",
+        decimals: 18,
+      },
+      blockExplorers: [
+        {
+          name: isMainnet ? "BaseScan" : "BaseScan Sepolia",
+          url: EXPLORER_URL,
+        },
+      ],
+    });
+  }
+  return _chain;
+}
+
+/**
+ * @deprecated Use getChain() instead - supports both mainnet and testnet
  */
 export function getBaseSepoliaChain() {
-  return baseSepolia;
+  return getChain();
 }
 
 /**
  * Get the PollPool contract instance
+ * Uses dynamic chain from config (mainnet or testnet based on CHAIN_ENV)
  */
 export function getPollPoolContract() {
-  const contractAddress = process.env.POLLPOOL_CONTRACT_ADDRESS;
-  if (!contractAddress) {
+  if (!POLLPOOL_ADDRESS || POLLPOOL_ADDRESS === "0x0000000000000000000000000000000000000000") {
     throw new Error("POLLPOOL_CONTRACT_ADDRESS environment variable is not set");
   }
 
   return getContract({
     client: getThirdwebClient(),
-    chain: baseSepolia,
-    address: contractAddress,
+    chain: getChain(),
+    address: POLLPOOL_ADDRESS,
     abi: POLLPOOL_ABI as any,
   });
 }
 
 /**
- * Get the USDC contract instance for Base Sepolia
+ * Get the USDC contract instance
+ * Uses dynamic chain and USDC address from config (mainnet or testnet based on CHAIN_ENV)
  */
 export function getUsdcContract() {
-  const usdcAddress = USDC_ADDRESSES["base-sepolia"];
-
   // Standard ERC20 ABI for approve and allowance
   const erc20Abi = [
     {
@@ -140,8 +178,8 @@ export function getUsdcContract() {
 
   return getContract({
     client: getThirdwebClient(),
-    chain: baseSepolia,
-    address: usdcAddress,
+    chain: getChain(),
+    address: USDC_ADDRESS,
     abi: erc20Abi,
   });
 }
@@ -418,17 +456,26 @@ export async function submitResponse(
 // ============ Configuration ============
 
 /**
- * Base Sepolia network configuration
+ * Current network configuration (dynamic based on CHAIN_ENV)
+ * - mainnet: Base (Chain ID 8453)
+ * - testnet: Base Sepolia (Chain ID 84532)
  */
-export const BASE_SEPOLIA_CONFIG = {
-  chainId: CHAIN_IDS["base-sepolia"],
-  name: "Base Sepolia",
-  rpcUrl: "https://sepolia.base.org",
-  blockExplorer: "https://sepolia.basescan.org",
-  usdcAddress: USDC_ADDRESSES["base-sepolia"],
+export const NETWORK_CONFIG = {
+  chainId: CHAIN_ID,
+  name: CHAIN_NAME,
+  rpcUrl: RPC_URL,
+  blockExplorer: EXPLORER_URL,
+  usdcAddress: USDC_ADDRESS,
+  pollPoolAddress: POLLPOOL_ADDRESS,
+  isMainnet,
 } as const;
 
 /**
- * Export chain ID for convenience
+ * @deprecated Use NETWORK_CONFIG instead
  */
-export const CHAIN_ID = CHAIN_IDS["base-sepolia"];
+export const BASE_SEPOLIA_CONFIG = NETWORK_CONFIG;
+
+/**
+ * Re-export chain ID for convenience (from config)
+ */
+export { CHAIN_ID };
