@@ -8,6 +8,8 @@ import {
   updatePollStatus,
   setPollContractId,
   getResponseCount,
+  getResponsesByPoll,
+  recordPayouts,
 } from "../db/queries.js";
 import { requireAuth, getUser } from "../middleware/auth.js";
 import {
@@ -367,14 +369,42 @@ polls.post("/:id/distribute", requireAuth, async (c) => {
     );
   }
 
+  // Get all responses to determine recipients
+  const responses = await getResponsesByPoll(pollId);
+  const responseCount = responses.length;
+
+  // Calculate payout per person (90% of pool after 10% platform fee)
+  const cashPool = parseFloat(poll.cashPoolUsdc);
+  const distributablePool = cashPool * 0.9;
+  const payoutPerPerson = responseCount > 0 ? distributablePool / responseCount : 0;
+
+  // Record payouts in database
+  if (responseCount > 0) {
+    const payoutRecords = responses.map((response) => ({
+      pollId,
+      recipientWallet: response.agentWallet,
+      amountUsdc: payoutPerPerson.toFixed(6),
+      txHash,
+      status: "confirmed" as const,
+      distributedAt: new Date(),
+    }));
+
+    try {
+      await recordPayouts(payoutRecords);
+    } catch (error) {
+      console.error("Failed to record payouts in database:", error);
+      // Don't fail the request - on-chain distribution already happened
+    }
+  }
+
   // Update poll status to distributed
   const updated = await updatePollStatus(pollId, "distributed");
-  const responseCount = await getResponseCount(pollId);
 
   return c.json({
     id: updated.id,
     status: updated.status,
     responseCount,
+    payoutPerPerson: payoutPerPerson.toFixed(6),
     txHash,
     message: "Funds distributed successfully",
   });
