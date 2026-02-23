@@ -418,11 +418,45 @@ export async function distribute(pollId: bigint): Promise<TransactionReceipt> {
 }
 
 /**
- * Submit a poll response with attestation (called on behalf of a user)
- * This is used when a user submits a response through our system
- * @param pollId - The poll ID
+ * Submit a poll response on behalf of a participant (relayed submission)
+ * This allows the server to submit for an agent, with the agent receiving the payout
+ * @param pollId - The poll ID (contract poll ID, not database ID)
+ * @param participant - The participant's wallet address who will receive payout
  * @param attestationSignature - The attestation signature proving eligibility
  * @returns Transaction receipt
+ */
+export async function submitResponseFor(
+  pollId: bigint,
+  participant: WalletAddress,
+  attestationSignature: `0x${string}`
+): Promise<TransactionReceipt> {
+  const contract = getPollPoolContract();
+  const account = getServerAccount();
+
+  const transaction = prepareContractCall({
+    contract,
+    method: "function submitResponseFor(uint256 _pollId, address _participant, bytes _attestationSignature)",
+    params: [pollId, participant, attestationSignature],
+  });
+
+  const txResult = await sendTransaction({
+    transaction,
+    account,
+  });
+
+  const hash = toTransactionHash(txResult.transactionHash);
+  if (!hash) {
+    throw new Error(`Invalid transaction hash: ${txResult.transactionHash}`);
+  }
+
+  return {
+    hash,
+    status: "confirmed" as TransactionStatus,
+  };
+}
+
+/**
+ * @deprecated Use submitResponseFor instead - supports relayed submissions
  */
 export async function submitResponse(
   pollId: bigint,

@@ -238,6 +238,45 @@ contract PollPool is ReentrancyGuard, Ownable {
     }
 
     /**
+     * @notice Submit a response on behalf of a participant (relayed submission)
+     * @dev Allows a relayer to submit for a participant. The attestation proves eligibility.
+     * @param _pollId ID of the poll to respond to
+     * @param _participant Address of the actual participant who will receive payout
+     * @param _attestationSignature Signature proving eligibility from attestation provider
+     */
+    function submitResponseFor(
+        uint256 _pollId,
+        address _participant,
+        bytes calldata _attestationSignature
+    ) external nonReentrant {
+        Poll storage poll = polls[_pollId];
+
+        // Check poll is active
+        if (poll.status != PollStatus.Active) revert PollNotActive();
+
+        // Check poll hasn't expired
+        if (block.timestamp >= poll.expiresAt) revert PollNotActive();
+
+        // Check cap not reached
+        if (poll.participantCount >= poll.participantCap) revert ParticipantCapReached();
+
+        // Check participant hasn't already participated
+        if (hasParticipated[_pollId][_participant]) revert AlreadyParticipated();
+
+        // Verify attestation signature (signed for the actual participant, not msg.sender)
+        if (!_verifyAttestation(_pollId, _participant, _attestationSignature)) {
+            revert InvalidAttestation();
+        }
+
+        // Record participation for the actual participant
+        hasParticipated[_pollId][_participant] = true;
+        participants[_pollId].push(_participant);
+        poll.participantCount++;
+
+        emit ResponseSubmitted(_pollId, _participant, poll.participantCount);
+    }
+
+    /**
      * @notice Close a poll to stop new responses
      * @dev Callable by creator anytime, or by anyone after expiry
      * @param _pollId ID of the poll to close
