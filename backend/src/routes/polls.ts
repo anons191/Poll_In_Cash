@@ -31,6 +31,8 @@ import type { AppEnv } from "../types/hono.js";
 import {
   closePoll as closeOnChain,
   distribute as distributeOnChain,
+  distributeBatch as distributeBatchOnChain,
+  getDistributionProgress,
 } from "../services/thirdweb/client.js";
 
 const polls = new Hono<AppEnv>();
@@ -353,11 +355,36 @@ polls.post("/:id/distribute", requireAuth, async (c) => {
     );
   }
 
-  let txHash: string;
+  // Get all responses to determine recipients
+  const responses = await getResponsesByPoll(pollId);
+  const responseCount = responses.length;
+
+  // Batch size for distribution (max participants per transaction)
+  const BATCH_SIZE = 100;
+  const txHashes: string[] = [];
 
   try {
-    const receipt = await distributeOnChain(BigInt(poll.contractPollId));
-    txHash = receipt.hash;
+    if (responseCount <= BATCH_SIZE) {
+      // Small poll - use single transaction
+      const receipt = await distributeOnChain(BigInt(poll.contractPollId));
+      txHashes.push(receipt.hash);
+    } else {
+      // Large poll - use batch distribution
+      let distributed = 0;
+      while (distributed < responseCount) {
+        const receipt = await distributeBatchOnChain(
+          BigInt(poll.contractPollId),
+          BATCH_SIZE
+        );
+        txHashes.push(receipt.hash);
+
+        // Check progress
+        const progress = await getDistributionProgress(BigInt(poll.contractPollId));
+        distributed = Number(progress.distributed);
+
+        if (progress.isComplete) break;
+      }
+    }
   } catch (error) {
     console.error("Failed to distribute funds on-chain:", error);
     return c.json(
@@ -369,9 +396,7 @@ polls.post("/:id/distribute", requireAuth, async (c) => {
     );
   }
 
-  // Get all responses to determine recipients
-  const responses = await getResponsesByPoll(pollId);
-  const responseCount = responses.length;
+  const txHash = txHashes[txHashes.length - 1]; // Last tx hash for response
 
   // Calculate payout per person (90% of pool after 10% platform fee)
   const cashPool = parseFloat(poll.cashPoolUsdc);

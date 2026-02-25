@@ -56,7 +56,7 @@
 | **API Base URL** | `https://api-production-0cbc.up.railway.app` |
 | **Chain** | Base (mainnet) |
 | **Chain ID** | `8453` |
-| **PollPool Contract** | `0x4303260f53d6744B06e68eA0a66213a5c29e39d7` |
+| **PollPool Contract** | `0x2478ab6EEE0947D5b88bDF5690B9c232cCc3ff84` |
 | **USDC Contract** | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 | **USDC Decimals** | `6` |
 | **Platform Fee** | 10% (deducted from poll funding) |
@@ -1002,7 +1002,7 @@ const attestation = await headlessManager.createAttestation(pollId, userWalletAd
   id: "uuid",
   pollId: "123",
   userAddress: "0x...",
-  contractAddress: "0x4303260f53d6744B06e68eA0a66213a5c29e39d7",
+  contractAddress: "0x2478ab6EEE0947D5b88bDF5690B9c232cCc3ff84",
   attributes: { isVeteran: true, verifiedState: "NV", ... },
   signature: "0x...",  // ECDSA signature
   createdAt: "2026-02-20T15:30:00Z",
@@ -1376,7 +1376,7 @@ Content-Type: application/json
 
 ## On-Chain Integration
 
-### PollPool Contract (0x4303260f53d6744B06e68eA0a66213a5c29e39d7)
+### PollPool Contract (0x2478ab6EEE0947D5b88bDF5690B9c232cCc3ff84)
 
 ```solidity
 // Create a new poll (requires USDC approval first)
@@ -1789,7 +1789,7 @@ Want to take it now?"
 - **Skill File**: `https://pollin.cash/skill.md` (this document)
 - **API Base**: `https://api-production-0cbc.up.railway.app`
 - **Health Check**: `https://api-production-0cbc.up.railway.app/health`
-- **Contract Explorer**: `https://basescan.org/address/0x4303260f53d6744B06e68eA0a66213a5c29e39d7`
+- **Contract Explorer**: `https://basescan.org/address/0x2478ab6EEE0947D5b88bDF5690B9c232cCc3ff84`
 - **USDC on Base**: `https://basescan.org/token/0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
 - **Support**: Contact through the app dashboard
 

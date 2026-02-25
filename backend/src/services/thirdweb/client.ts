@@ -40,8 +40,9 @@ import { POLLPOOL_ABI } from "../../contracts/pollpool-abi.js";
 export enum PollStatus {
   Active = 0,
   Closed = 1,
-  Distributed = 2,
-  Cancelled = 3,
+  Distributing = 2,  // New: partial distribution in progress
+  Distributed = 3,
+  Cancelled = 4,
 }
 
 /**
@@ -387,7 +388,7 @@ export async function closePoll(pollId: bigint): Promise<TransactionReceipt> {
 }
 
 /**
- * Distribute funds for a closed poll
+ * Distribute funds for a closed poll (single transaction - for small polls)
  * @param pollId - The poll ID to distribute
  * @returns Transaction receipt
  */
@@ -414,6 +415,66 @@ export async function distribute(pollId: bigint): Promise<TransactionReceipt> {
   return {
     hash,
     status: "confirmed" as TransactionStatus,
+  };
+}
+
+/**
+ * Distribute funds in batches (for large polls to avoid gas limits)
+ * @param pollId - The poll ID to distribute
+ * @param batchSize - Number of participants to pay in this batch
+ * @returns Transaction receipt
+ */
+export async function distributeBatch(
+  pollId: bigint,
+  batchSize: number
+): Promise<TransactionReceipt> {
+  const contract = getPollPoolContract();
+  const account = getServerAccount();
+
+  const transaction = prepareContractCall({
+    contract,
+    method: "function distributeBatch(uint256 _pollId, uint256 _batchSize)",
+    params: [pollId, BigInt(batchSize)],
+  });
+
+  const txResult = await sendTransaction({
+    transaction,
+    account,
+  });
+
+  const hash = toTransactionHash(txResult.transactionHash);
+  if (!hash) {
+    throw new Error(`Invalid transaction hash: ${txResult.transactionHash}`);
+  }
+
+  return {
+    hash,
+    status: "confirmed" as TransactionStatus,
+  };
+}
+
+/**
+ * Get distribution progress for a poll
+ * @param pollId - The poll ID
+ * @returns Distribution progress info
+ */
+export async function getDistributionProgress(pollId: bigint): Promise<{
+  distributed: bigint;
+  total: bigint;
+  isComplete: boolean;
+}> {
+  const contract = getPollPoolContract();
+
+  const result = await readContract({
+    contract,
+    method: "function getDistributionProgress(uint256 _pollId) view returns (uint256 distributed, uint256 total, bool isComplete)",
+    params: [pollId],
+  });
+
+  return {
+    distributed: result[0],
+    total: result[1],
+    isComplete: result[2],
   };
 }
 

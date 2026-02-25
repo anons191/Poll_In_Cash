@@ -23,6 +23,7 @@ contract PollPool is ReentrancyGuard, Ownable {
     enum PollStatus {
         Active,
         Closed,
+        Distributing,  // New: partially distributed
         Distributed,
         Cancelled
     }
@@ -61,6 +62,9 @@ contract PollPool is ReentrancyGuard, Ownable {
     // pollId => array of participant addresses
     mapping(uint256 => address[]) public participants;
 
+    // pollId => number of participants already paid out (for batch distribution)
+    mapping(uint256 => uint256) public distributedCount;
+
     // ============ Events ============
 
     event PollCreated(
@@ -93,6 +97,14 @@ contract PollPool is ReentrancyGuard, Ownable {
         uint256 returnedToCreator
     );
 
+    event BatchDistributed(
+        uint256 indexed pollId,
+        uint256 startIndex,
+        uint256 count,
+        uint256 payoutPerPerson,
+        uint256 totalDistributedSoFar
+    );
+
     event PollCancelled(
         uint256 indexed pollId,
         address indexed creator,
@@ -117,6 +129,9 @@ contract PollPool is ReentrancyGuard, Ownable {
     error InvalidAttestation();
     error NotPollCreator();
     error NothingToDistribute();
+    error InvalidBatchParams();
+    error DistributionNotStarted();
+    error DistributionAlreadyComplete();
 
     // ============ Constructor ============
 
@@ -297,8 +312,8 @@ contract PollPool is ReentrancyGuard, Ownable {
     }
 
     /**
-     * @notice Distribute funds to all participants after poll is closed
-     * @dev Calculates even distribution, returns unused funds to creator
+     * @notice Distribute funds to all participants after poll is closed (single transaction)
+     * @dev For small polls. Use distributeBatch for large polls to avoid gas limits.
      * @param _pollId ID of the poll to distribute
      */
     function distribute(uint256 _pollId) external nonReentrant {
@@ -331,6 +346,9 @@ contract PollPool is ReentrancyGuard, Ownable {
                 usdc.safeTransfer(pollParticipants[i], payoutPerPerson);
             }
 
+            // Mark all as distributed
+            distributedCount[_pollId] = participantCount;
+
             // Return any remainder to creator (due to rounding)
             if (returnedToCreator > 0) {
                 usdc.safeTransfer(poll.creator, returnedToCreator);
@@ -338,6 +356,107 @@ contract PollPool is ReentrancyGuard, Ownable {
         }
 
         emit FundsDistributed(_pollId, participantCount, payoutPerPerson, returnedToCreator);
+    }
+
+    /**
+     * @notice Distribute funds in batches to handle large participant counts
+     * @dev Call multiple times with increasing startIndex until all participants are paid
+     * @param _pollId ID of the poll to distribute
+     * @param _batchSize Number of participants to pay in this batch (max ~200 recommended)
+     */
+    function distributeBatch(
+        uint256 _pollId,
+        uint256 _batchSize
+    ) external nonReentrant {
+        Poll storage poll = polls[_pollId];
+
+        // Must be closed or already distributing
+        if (poll.status != PollStatus.Closed && poll.status != PollStatus.Distributing) {
+            revert PollNotClosed();
+        }
+
+        uint256 participantCount = poll.participantCount;
+        uint256 alreadyDistributed = distributedCount[_pollId];
+
+        // Check if there's anything left to distribute
+        if (alreadyDistributed >= participantCount) {
+            revert DistributionAlreadyComplete();
+        }
+
+        // Handle zero participants
+        if (participantCount == 0) {
+            poll.status = PollStatus.Distributed;
+            uint256 returnedToCreator = poll.distributablePool;
+            if (returnedToCreator > 0) {
+                usdc.safeTransfer(poll.creator, returnedToCreator);
+            }
+            emit FundsDistributed(_pollId, 0, 0, returnedToCreator);
+            return;
+        }
+
+        // Mark as distributing (in progress)
+        if (poll.status == PollStatus.Closed) {
+            poll.status = PollStatus.Distributing;
+        }
+
+        // Calculate payout per person
+        uint256 distributablePool = poll.distributablePool;
+        uint256 payoutPerPerson = distributablePool / participantCount;
+
+        // Calculate actual batch size (don't exceed remaining participants)
+        uint256 remaining = participantCount - alreadyDistributed;
+        uint256 actualBatchSize = _batchSize > remaining ? remaining : _batchSize;
+
+        if (actualBatchSize == 0) revert InvalidBatchParams();
+
+        // Distribute to this batch
+        address[] storage pollParticipants = participants[_pollId];
+        for (uint256 i = 0; i < actualBatchSize; i++) {
+            usdc.safeTransfer(pollParticipants[alreadyDistributed + i], payoutPerPerson);
+        }
+
+        // Update distributed count
+        uint256 newDistributedCount = alreadyDistributed + actualBatchSize;
+        distributedCount[_pollId] = newDistributedCount;
+
+        emit BatchDistributed(
+            _pollId,
+            alreadyDistributed,
+            actualBatchSize,
+            payoutPerPerson,
+            newDistributedCount
+        );
+
+        // Check if distribution is complete
+        if (newDistributedCount >= participantCount) {
+            poll.status = PollStatus.Distributed;
+
+            // Return remainder to creator
+            uint256 returnedToCreator = distributablePool - (payoutPerPerson * participantCount);
+            if (returnedToCreator > 0) {
+                usdc.safeTransfer(poll.creator, returnedToCreator);
+            }
+
+            emit FundsDistributed(_pollId, participantCount, payoutPerPerson, returnedToCreator);
+        }
+    }
+
+    /**
+     * @notice Get distribution progress for a poll
+     * @param _pollId ID of the poll
+     * @return distributed Number of participants already paid
+     * @return total Total number of participants
+     * @return isComplete Whether distribution is complete
+     */
+    function getDistributionProgress(uint256 _pollId) external view returns (
+        uint256 distributed,
+        uint256 total,
+        bool isComplete
+    ) {
+        Poll storage poll = polls[_pollId];
+        distributed = distributedCount[_pollId];
+        total = poll.participantCount;
+        isComplete = poll.status == PollStatus.Distributed;
     }
 
     /**
