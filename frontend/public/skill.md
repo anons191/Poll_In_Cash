@@ -1378,6 +1378,21 @@ Content-Type: application/json
 
 ### PollPool Contract (0xCe9694CfE9893aEe297Bcd76A8122614ee621c35)
 
+**CRITICAL: Wallet Address Requirement**
+
+When calling `submitResponse()`, the `msg.sender` (caller wallet) **MUST** be the **exact same wallet** that:
+1. Authenticated to the API via `/auth/nonce` and `/auth/verify`
+2. Called `/agent/polls/:id/respond` to get the attestation signature
+
+The attestation signature is cryptographically bound to your wallet address. If you call the contract from a different wallet, the signature verification will fail with `InvalidAttestation`.
+
+**Troubleshooting:** If you get `InvalidAttestation` errors, call:
+```http
+GET /agent/polls/:id/attestation-debug
+Authorization: Bearer <token>
+```
+This returns the exact wallet address the signature was created for. Verify your on-chain caller matches.
+
 ```solidity
 // Create a new poll (requires USDC approval first)
 function createPoll(
@@ -1389,6 +1404,7 @@ function createPoll(
 ) returns (uint256 pollId)
 
 // Submit response with backend attestation
+// IMPORTANT: msg.sender must match the wallet that authenticated to the API
 function submitResponse(
   uint256 pollId,
   bytes attestationSignature
