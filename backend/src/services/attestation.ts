@@ -5,7 +5,7 @@
  * to respond to a poll. The attestation is verified on-chain by the contract.
  */
 
-import { Wallet, keccak256, solidityPacked, getBytes } from "ethers";
+import { Wallet, keccak256, solidityPacked, getBytes, getAddress } from "ethers";
 import { POLLPOOL_ADDRESS } from "../config/chain.js";
 
 /**
@@ -39,18 +39,36 @@ export async function createAttestationSignature(
 ): Promise<`0x${string}`> {
   const signer = getAttestationSigner();
 
+  // IMPORTANT: Use checksum address format for encoding
+  // The contract uses abi.encodePacked which encodes addresses as 20 bytes
+  // ethers.getAddress() returns the proper checksum format
+  // But solidityPacked actually just uses the hex bytes, so case doesn't matter for encoding
+  // However, we log the checksum version for clarity
+  const checksumAddress = getAddress(participantAddress);
+  const checksumContract = getAddress(POLLPOOL_ADDRESS);
+
   // Create the message hash that the contract expects
   // keccak256(abi.encodePacked(pollId, participant, contractAddress))
   const messageHash = keccak256(
     solidityPacked(
       ["uint256", "address", "address"],
-      [pollId, participantAddress, POLLPOOL_ADDRESS]
+      [pollId, checksumAddress, checksumContract]
     )
   );
 
   // Sign the message using EIP-191 personal sign (which adds the Ethereum prefix)
   // This matches what the contract expects via ECDSA.recover + toEthSignedMessageHash
   const signature = await signer.signMessage(getBytes(messageHash));
+
+  // Debug logging for attestation verification
+  console.log("[Attestation] Creating signature:", {
+    pollId: pollId.toString(),
+    participantAddress: checksumAddress,
+    contractAddress: checksumContract,
+    messageHash,
+    signerAddress: signer.address,
+    signaturePrefix: signature.slice(0, 20) + "...",
+  });
 
   return signature as `0x${string}`;
 }

@@ -33,7 +33,6 @@ import {
 import type { PollCriteria, VerifiedAttributes } from "../db/schema.js";
 import type { AppEnv } from "../types/hono.js";
 import { createAttestationSignature } from "../services/attestation.js";
-import { submitResponseFor } from "../services/thirdweb/client.js";
 import { toWalletAddress } from "../types/wallet.js";
 
 const agents = new Hono<AppEnv>();
@@ -377,17 +376,6 @@ agents.post(
       }
     }
 
-    // Check if poll has been funded on-chain (required for on-chain submission)
-    if (poll.contractPollId === null) {
-      return c.json(
-        {
-          error: "Poll has not been funded on-chain yet",
-          code: "NOT_FUNDED",
-        },
-        400
-      );
-    }
-
     // Validate participant wallet address
     const participantWallet = toWalletAddress(user.walletAddress);
     if (!participantWallet) {
@@ -400,85 +388,23 @@ agents.post(
       );
     }
 
-    // Create attestation signature for on-chain verification
-    let attestationSignature: `0x${string}`;
-    try {
-      attestationSignature = await createAttestationSignature(
-        BigInt(poll.contractPollId),
-        participantWallet
-      );
-    } catch (error) {
-      console.error("Failed to create attestation signature:", error);
-      return c.json(
-        {
-          error: "Failed to create attestation signature",
-          code: "ATTESTATION_ERROR",
-        },
-        500
-      );
+    // For V2 claim model: Generate attestation signature for agent to use
+    // Agent will submit on-chain themselves (pays their own gas)
+    let attestationSignature: `0x${string}` | null = null;
+    if (poll.contractPollId !== null) {
+      try {
+        attestationSignature = await createAttestationSignature(
+          BigInt(poll.contractPollId),
+          participantWallet
+        );
+      } catch (error) {
+        console.error("Failed to create attestation signature:", error);
+        // Continue without attestation - response will be recorded in DB
+      }
     }
 
-    // Submit response on-chain first (this is the source of truth for payouts)
-    let txHash: string;
-    try {
-      const receipt = await submitResponseFor(
-        BigInt(poll.contractPollId),
-        participantWallet,
-        attestationSignature
-      );
-      txHash = receipt.hash;
-    } catch (error: any) {
-      console.error("Failed to submit response on-chain:", error);
-
-      // Check for common contract errors
-      const errorMessage = error?.message || String(error);
-      if (errorMessage.includes("AlreadyParticipated")) {
-        return c.json(
-          {
-            error: "You have already participated in this poll on-chain",
-            code: "ALREADY_PARTICIPATED",
-          },
-          400
-        );
-      }
-      if (errorMessage.includes("ParticipantCapReached")) {
-        return c.json(
-          {
-            error: "Poll participant cap has been reached",
-            code: "CAP_REACHED",
-          },
-          400
-        );
-      }
-      if (errorMessage.includes("PollNotActive")) {
-        return c.json(
-          {
-            error: "Poll is no longer active",
-            code: "POLL_NOT_ACTIVE",
-          },
-          400
-        );
-      }
-      if (errorMessage.includes("InvalidAttestation")) {
-        return c.json(
-          {
-            error: "Attestation verification failed",
-            code: "INVALID_ATTESTATION",
-          },
-          500
-        );
-      }
-
-      return c.json(
-        {
-          error: "Failed to submit response on-chain",
-          code: "CONTRACT_ERROR",
-        },
-        500
-      );
-    }
-
-    // Record response in database (after successful on-chain submission)
+    // Record response in database
+    // Agent can submit on-chain later using the attestation signature
     const response = await recordResponse({
       pollId,
       agentWallet: user.walletAddress,
@@ -498,8 +424,14 @@ agents.post(
         submittedAt: response.submittedAt.toISOString(),
         payoutEstimate: payoutEstimate.toFixed(6),
         participantNumber: newResponseCount,
-        txHash, // Include the on-chain transaction hash
-        message: "Response submitted successfully",
+        contractPollId: poll.contractPollId,
+        attestationSignature, // Agent uses this to submit on-chain
+        // IMPORTANT: Include the wallet address that the attestation was signed for
+        // The agent MUST call submitResponse from this exact address
+        attestationFor: participantWallet,
+        message: attestationSignature
+          ? `Response recorded. Call submitResponse(${poll.contractPollId}, attestationSignature) on contract 0xCe9694CfE9893aEe297Bcd76A8122614ee621c35 from wallet ${participantWallet} to claim payout.`
+          : "Response recorded successfully",
       },
       201
     );
