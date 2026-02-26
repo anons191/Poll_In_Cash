@@ -10,6 +10,7 @@ import {
   getResponseCount,
   getResponsesByPoll,
   recordPayouts,
+  createPendingPayouts,
 } from "../db/queries.js";
 import { requireAuth, getUser } from "../middleware/auth.js";
 import {
@@ -313,9 +314,106 @@ polls.patch("/:id/close", requireAuth, async (c) => {
 });
 
 /**
+ * POST /polls/:id/finalize
+ * Finalize payouts after poll is closed (V2 claim model)
+ * Calculates payout per person and opens 90-day claim window
+ * Creator must call finalizePayouts() on the contract first
+ */
+polls.post("/:id/finalize", requireAuth, async (c) => {
+  const user = getUser(c);
+  const pollId = c.req.param("id");
+
+  // Check ownership
+  const ownershipResult = await checkPollOwnership(user, pollId);
+
+  if (!isAuthorized(ownershipResult)) {
+    return c.json(
+      { error: ownershipResult.error, code: ownershipResult.code },
+      ownershipResult.status as 403 | 404
+    );
+  }
+
+  const poll = ownershipResult.resource;
+
+  // Can only finalize closed polls
+  if (poll.status !== "closed") {
+    return c.json(
+      {
+        error: `Cannot finalize poll with status: ${poll.status}. Poll must be closed first.`,
+        code: "INVALID_STATUS",
+      },
+      400
+    );
+  }
+
+  // Must have a contract ID
+  if (poll.contractPollId === null) {
+    return c.json(
+      {
+        error: "Poll has no on-chain contract ID",
+        code: "NO_CONTRACT",
+      },
+      400
+    );
+  }
+
+  // Get all responses to determine recipients
+  const responses = await getResponsesByPoll(pollId);
+  const responseCount = responses.length;
+
+  if (responseCount === 0) {
+    // No participants - return funds to creator on-chain
+    // Update status and return
+    const updated = await updatePollStatus(pollId, "distributed");
+    return c.json({
+      id: updated.id,
+      status: updated.status,
+      responseCount: 0,
+      payoutPerPerson: "0",
+      message: "No participants - funds returned to creator on-chain",
+    });
+  }
+
+  // Calculate payout per person (90% of pool after 10% platform fee)
+  const cashPool = parseFloat(poll.cashPoolUsdc);
+  const distributablePool = cashPool * 0.9;
+  const payoutPerPerson = distributablePool / responseCount;
+
+  // Calculate claim deadline (90 days from now)
+  const claimDeadline = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+
+  // Create pending payout records for all participants
+  try {
+    await createPendingPayouts(pollId, payoutPerPerson.toFixed(6), claimDeadline);
+  } catch (error) {
+    console.error("Failed to create pending payouts:", error);
+    return c.json(
+      {
+        error: "Failed to create payout records",
+        code: "DATABASE_ERROR",
+      },
+      500
+    );
+  }
+
+  // Update poll status to finalized
+  const updated = await updatePollStatus(pollId, "finalized");
+
+  return c.json({
+    id: updated.id,
+    status: updated.status,
+    responseCount,
+    payoutPerPerson: payoutPerPerson.toFixed(6),
+    claimDeadline: claimDeadline.toISOString(),
+    message: "Payouts finalized. Participants have 90 days to claim.",
+  });
+});
+
+/**
  * POST /polls/:id/distribute
  * Distribute funds to all participants after poll is closed
  * Triggers on-chain distribute() to send USDC payouts
+ * @deprecated Use /polls/:id/finalize for V2 claim model
  */
 polls.post("/:id/distribute", requireAuth, async (c) => {
   const user = getUser(c);

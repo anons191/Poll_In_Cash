@@ -83,6 +83,7 @@ dashboard.get("/summary", requireAuth, async (c) => {
     draft: 0,
     active: 0,
     closed: 0,
+    finalized: 0,
     distributed: 0,
     cancelled: 0,
   };

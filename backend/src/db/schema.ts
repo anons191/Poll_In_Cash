@@ -18,6 +18,7 @@ export const pollStatusEnum = pgEnum("poll_status", [
   "draft",
   "active",
   "closed",
+  "finalized",  // Payouts calculated, claims open (90 day window)
   "distributed",
   "cancelled",
 ]);
@@ -104,6 +105,7 @@ export const pollResponses = pgTable(
     responses: jsonb("responses").notNull().$type<ResponseAnswer[]>(),
     confidenceScores: jsonb("confidence_scores").$type<ConfidenceScore[]>(),
     attestationHash: text("attestation_hash").notNull(),
+    onChainTxHash: text("on_chain_tx_hash"), // Transaction hash when agent submitted on-chain
     submittedAt: timestamp("submitted_at").defaultNow().notNull(),
   },
   (table) => [
@@ -118,7 +120,8 @@ export const pollResponses = pgTable(
 );
 
 /**
- * Payouts table - tracks USDC distributions
+ * Payouts table - tracks USDC distributions and claims
+ * In claim model: records created when poll is finalized, updated when agent claims
  */
 export const payouts = pgTable(
   "payouts",
@@ -129,14 +132,17 @@ export const payouts = pgTable(
       .notNull(),
     recipientWallet: text("recipient_wallet").notNull(),
     amountUsdc: decimal("amount_usdc", { precision: 18, scale: 6 }).notNull(),
-    txHash: text("tx_hash"), // on-chain transaction hash
+    txHash: text("tx_hash"), // on-chain transaction hash (claim tx or push distribution tx)
     status: payoutStatusEnum("status").default("pending").notNull(),
-    distributedAt: timestamp("distributed_at"),
+    claimDeadline: timestamp("claim_deadline"), // 90 days after poll finalized
+    claimedAt: timestamp("claimed_at"), // When agent claimed on-chain
+    distributedAt: timestamp("distributed_at"), // Legacy: when push distributed
   },
   (table) => [
     index("payouts_poll_id_idx").on(table.pollId),
     index("payouts_recipient_wallet_idx").on(table.recipientWallet),
     index("payouts_status_idx").on(table.status),
+    index("payouts_claim_deadline_idx").on(table.claimDeadline),
   ]
 );
 

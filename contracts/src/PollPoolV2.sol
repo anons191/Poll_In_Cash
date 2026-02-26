@@ -38,8 +38,9 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
 
     enum PollStatus {
         Active,
-        Closed,
-        Distributed,
+        Closed,      // No more responses, awaiting finalization
+        Finalized,   // Payouts calculated, claims open
+        Swept,       // All claimed or unclaimed swept
         Cancelled
     }
 
@@ -128,6 +129,13 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
         uint256 payoutPerPerson
     );
 
+    event PollFinalized(
+        uint256 indexed pollId,
+        uint256 participantCount,
+        uint256 payoutPerPerson,
+        uint256 claimDeadline
+    );
+
     event PayoutClaimed(
         uint256 indexed pollId,
         address indexed participant,
@@ -178,6 +186,7 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
     error InvalidParticipantCap();
     error PollNotActive();
     error PollNotClosed();
+    error PollNotFinalized();
     error PollAlreadyDistributed();
     error PollNotExpired();
     error ParticipantCapReached();
@@ -289,7 +298,8 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
     }
 
     /**
-     * @notice Close a poll and calculate payout per person
+     * @notice Close a poll to stop new responses
+     * @dev Creator can close anytime, anyone after expiry. Does NOT calculate payouts.
      */
     function closePoll(uint256 _pollId) external whenNotPaused {
         Poll storage poll = polls[_pollId];
@@ -302,22 +312,50 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
         poll.status = PollStatus.Closed;
         poll.closedAt = block.timestamp;
 
-        // Calculate payout per person
-        if (poll.participantCount > 0) {
-            payoutPerPerson[_pollId] = poll.distributablePool / poll.participantCount;
+        emit PollClosed(_pollId, msg.sender, poll.participantCount, 0);
+    }
+
+    /**
+     * @notice Finalize payouts after poll is closed (creator only)
+     * @dev Calculates payout per person and opens 90-day claim window
+     */
+    function finalizePayouts(uint256 _pollId) external whenNotPaused {
+        Poll storage poll = polls[_pollId];
+
+        if (poll.status != PollStatus.Closed) revert PollNotClosed();
+        if (msg.sender != poll.creator) revert NotPollCreator();
+
+        uint256 participantCount = poll.participantCount;
+
+        if (participantCount == 0) {
+            // No participants - return all funds to creator
+            poll.status = PollStatus.Swept;
+            uint256 returnAmount = poll.distributablePool;
+            if (returnAmount > 0) {
+                usdc.safeTransfer(poll.creator, returnAmount);
+            }
+            emit PollFinalized(_pollId, 0, 0, 0);
+            return;
         }
 
-        emit PollClosed(_pollId, msg.sender, poll.participantCount, payoutPerPerson[_pollId]);
+        // Calculate payout per person
+        uint256 payout = poll.distributablePool / participantCount;
+        payoutPerPerson[_pollId] = payout;
+
+        poll.status = PollStatus.Finalized;
+
+        emit PollFinalized(_pollId, participantCount, payout, poll.closedAt + CLAIM_EXPIRY);
     }
 
     /**
      * @notice Claim payout for a participant (pull pattern)
+     * @dev Can only claim after poll is finalized and before 90-day deadline
      */
     function claimPayout(uint256 _pollId) external nonReentrant whenNotPaused {
         Poll storage poll = polls[_pollId];
 
-        if (poll.status != PollStatus.Closed && poll.status != PollStatus.Distributed) {
-            revert PollNotClosed();
+        if (poll.status != PollStatus.Finalized) {
+            revert PollNotFinalized();
         }
         if (!hasParticipated[_pollId][msg.sender]) revert NotParticipant();
         if (hasClaimed[_pollId][msg.sender]) revert AlreadyClaimed();
@@ -333,11 +371,11 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
 
         emit PayoutClaimed(_pollId, msg.sender, payout);
 
-        // Mark as distributed when all claimed
+        // Mark as swept when all claimed
         if (claimedCount[_pollId] == poll.participantCount) {
-            poll.status = PollStatus.Distributed;
+            poll.status = PollStatus.Swept;
 
-            // Return remainder to creator
+            // Return remainder to creator (dust from integer division)
             uint256 remainder = poll.distributablePool - (payout * poll.participantCount);
             if (remainder > 0) {
                 usdc.safeTransfer(poll.creator, remainder);
@@ -349,6 +387,7 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
 
     /**
      * @notice Batch distribute to participants who haven't claimed
+     * @dev Creator can use this to push payouts to agents who haven't claimed
      */
     function distributeBatch(
         uint256 _pollId,
@@ -357,7 +396,7 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
     ) external nonReentrant whenNotPaused {
         Poll storage poll = polls[_pollId];
 
-        if (poll.status != PollStatus.Closed) revert PollNotClosed();
+        if (poll.status != PollStatus.Finalized) revert PollNotFinalized();
         if (_startIndex >= _endIndex) revert InvalidBatchRange();
         if (_endIndex > poll.participantCount) revert InvalidBatchRange();
 
@@ -379,9 +418,9 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
 
         emit BatchDistributed(_pollId, _startIndex, _endIndex, totalDistributed);
 
-        // Mark as distributed when all claimed
+        // Mark as swept when all claimed
         if (claimedCount[_pollId] == poll.participantCount) {
-            poll.status = PollStatus.Distributed;
+            poll.status = PollStatus.Swept;
 
             uint256 remainder = poll.distributablePool - (payout * poll.participantCount);
             if (remainder > 0) {
@@ -394,13 +433,15 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
 
     /**
      * @notice Legacy distribute function for backwards compatibility
+     * @dev Combines close + finalize + distribute all in one (old workflow)
+     *      Works from Closed status for polls that haven't been finalized
      */
     function distribute(uint256 _pollId) external nonReentrant whenNotPaused {
         Poll storage poll = polls[_pollId];
 
         if (poll.status != PollStatus.Closed) revert PollNotClosed();
 
-        poll.status = PollStatus.Distributed;
+        poll.status = PollStatus.Swept;
 
         uint256 participantCount = poll.participantCount;
         uint256 distributablePool = poll.distributablePool;
@@ -414,6 +455,7 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
             }
         } else {
             payout = distributablePool / participantCount;
+            payoutPerPerson[_pollId] = payout; // Store for record keeping
             uint256 totalDistributed = payout * participantCount;
             returnedToCreator = distributablePool - totalDistributed;
 
@@ -456,12 +498,13 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
 
     /**
      * @notice Sweep unclaimed funds after 90 days
+     * @dev Only callable by SWEEPER_ROLE after claim deadline passes
      */
     function sweepUnclaimedFunds(uint256 _pollId) external nonReentrant onlyRole(SWEEPER_ROLE) {
         Poll storage poll = polls[_pollId];
 
-        if (poll.status != PollStatus.Closed && poll.status != PollStatus.Distributed) {
-            revert PollNotClosed();
+        if (poll.status != PollStatus.Finalized) {
+            revert PollNotFinalized();
         }
         if (block.timestamp <= poll.closedAt + CLAIM_EXPIRY) revert ClaimNotExpired();
 
@@ -471,7 +514,13 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
 
         // Mark all as claimed to prevent double-sweep
         claimedCount[_pollId] = poll.participantCount;
-        poll.status = PollStatus.Distributed;
+        poll.status = PollStatus.Swept;
+
+        // Return remainder dust to creator
+        uint256 remainder = poll.distributablePool - (payoutPerPerson[_pollId] * poll.participantCount);
+        if (remainder > 0) {
+            usdc.safeTransfer(poll.creator, remainder);
+        }
 
         usdc.safeTransfer(treasury, unclaimed);
 
@@ -630,7 +679,7 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
         if (hasClaimed[_pollId][_participant]) return 0;
 
         Poll storage poll = polls[_pollId];
-        if (poll.status != PollStatus.Closed && poll.status != PollStatus.Distributed) return 0;
+        if (poll.status != PollStatus.Finalized) return 0;
         if (block.timestamp > poll.closedAt + CLAIM_EXPIRY) return 0;
 
         return payoutPerPerson[_pollId];
@@ -649,9 +698,26 @@ contract PollPoolV2 is ReentrancyGuard, Pausable, AccessControl {
 
     function canSweep(uint256 _pollId) external view returns (bool) {
         Poll storage poll = polls[_pollId];
-        if (poll.status != PollStatus.Closed && poll.status != PollStatus.Distributed) return false;
+        if (poll.status != PollStatus.Finalized) return false;
         if (block.timestamp <= poll.closedAt + CLAIM_EXPIRY) return false;
         return (poll.participantCount - claimedCount[_pollId]) > 0;
+    }
+
+    /**
+     * @notice Get distribution progress for a poll
+     * @return distributed Number of participants who have claimed
+     * @return total Total number of participants
+     * @return isComplete True if all participants have claimed
+     */
+    function getDistributionProgress(uint256 _pollId) external view returns (
+        uint256 distributed,
+        uint256 total,
+        bool isComplete
+    ) {
+        Poll storage poll = polls[_pollId];
+        distributed = claimedCount[_pollId];
+        total = poll.participantCount;
+        isComplete = distributed == total;
     }
 
     /**

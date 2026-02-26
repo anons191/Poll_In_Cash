@@ -10,6 +10,11 @@ import {
   getAgentProfileByWallet,
   getOrCreateAgentProfile,
   updateAgentProfile,
+  getAgentResponse,
+  updateResponseTxHash,
+  getClaimablePayouts,
+  getPayoutForAgent,
+  updatePayoutAsClaimed,
 } from "../db/queries.js";
 import { requireAuth, getUser, optionalAuth } from "../middleware/auth.js";
 import { checkCanSubmitResponse, isAuthorized } from "../auth/ownership.js";
@@ -531,6 +536,299 @@ agents.get("/earnings", requireAuth, async (c) => {
     pollsCompleted: profile?.pollsCompleted ?? 0,
     reliabilityScore: profile?.reliabilityScore ?? "1.00",
     recentPayouts: formattedPayouts,
+  });
+});
+
+// ============ Claim-Based Model Endpoints (V2) ============
+
+/**
+ * GET /agent/polls/:id/attestation
+ * Get attestation signature for agent to submit on-chain
+ * Agent uses this signature to call submitResponse() on PollPoolV2
+ */
+agents.get("/polls/:id/attestation", requireAuth, async (c) => {
+  const user = getUser(c);
+  const pollId = c.req.param("id");
+
+  const poll = await getPollById(pollId);
+
+  if (!poll) {
+    return c.json({ error: "Poll not found", code: "POLL_NOT_FOUND" }, 404);
+  }
+
+  if (poll.status !== "active") {
+    return c.json(
+      {
+        error: `Poll is ${poll.status}, not accepting responses`,
+        code: "POLL_NOT_ACTIVE",
+      },
+      400
+    );
+  }
+
+  // Check if poll has been funded on-chain
+  if (poll.contractPollId === null) {
+    return c.json(
+      {
+        error: "Poll has not been funded on-chain yet",
+        code: "NOT_FUNDED",
+      },
+      400
+    );
+  }
+
+  // Check if already responded (in database)
+  const alreadyResponded = await hasAgentResponded(pollId, user.walletAddress);
+
+  if (alreadyResponded) {
+    return c.json(
+      {
+        error: "You have already responded to this poll",
+        code: "ALREADY_RESPONDED",
+      },
+      400
+    );
+  }
+
+  // Check if cap reached
+  const responseCount = await getResponseCount(pollId);
+
+  if (responseCount >= poll.participantCap) {
+    return c.json(
+      {
+        error: "Poll has reached participant cap",
+        code: "CAP_REACHED",
+      },
+      400
+    );
+  }
+
+  // Validate participant wallet address
+  const participantWallet = toWalletAddress(user.walletAddress);
+  if (!participantWallet) {
+    return c.json(
+      {
+        error: "Invalid wallet address",
+        code: "INVALID_WALLET",
+      },
+      400
+    );
+  }
+
+  // Create attestation signature for on-chain verification
+  let attestationSignature: `0x${string}`;
+  try {
+    attestationSignature = await createAttestationSignature(
+      BigInt(poll.contractPollId),
+      participantWallet
+    );
+  } catch (error) {
+    console.error("Failed to create attestation signature:", error);
+    return c.json(
+      {
+        error: "Failed to create attestation signature",
+        code: "ATTESTATION_ERROR",
+      },
+      500
+    );
+  }
+
+  // Calculate payout estimate
+  const payoutEstimate = (parseFloat(poll.cashPoolUsdc) * 0.9) / poll.participantCap;
+
+  // Signature valid for 1 hour
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+  return c.json({
+    attestationSignature,
+    pollId,
+    contractPollId: poll.contractPollId,
+    participantWallet,
+    payoutEstimate: payoutEstimate.toFixed(6),
+    expiresAt: expiresAt.toISOString(),
+    message: "Use this signature to call submitResponse() on the contract. Agent pays gas.",
+  });
+});
+
+/**
+ * POST /agent/polls/:id/confirm-response
+ * Confirm on-chain response submission
+ * Agent provides txHash after calling submitResponse() on-chain
+ */
+agents.post("/polls/:id/confirm-response", requireAuth, validateBody(submitResponseSchema), async (c) => {
+  const user = getUser(c);
+  const pollId = c.req.param("id");
+  const body = c.get("validatedBody") as unknown as SubmitResponseRequest;
+
+  // Get txHash from request body (if provided)
+  const txHash = (body as any).txHash as string | undefined;
+
+  const poll = await getPollById(pollId);
+
+  if (!poll) {
+    return c.json({ error: "Poll not found", code: "POLL_NOT_FOUND" }, 404);
+  }
+
+  // Check if already responded in database
+  const existingResponse = await getAgentResponse(pollId, user.walletAddress);
+
+  if (existingResponse) {
+    // If already has txHash, reject
+    if (existingResponse.onChainTxHash) {
+      return c.json(
+        {
+          error: "Response already confirmed on-chain",
+          code: "ALREADY_CONFIRMED",
+        },
+        400
+      );
+    }
+
+    // Update with txHash if provided
+    if (txHash) {
+      const updated = await updateResponseTxHash(existingResponse.id, txHash);
+      return c.json({
+        id: updated.id,
+        pollId: updated.pollId,
+        txHash: updated.onChainTxHash,
+        message: "Response confirmed with on-chain transaction",
+      });
+    }
+
+    return c.json({
+      id: existingResponse.id,
+      pollId: existingResponse.pollId,
+      message: "Response already recorded (no txHash update)",
+    });
+  }
+
+  // Validate that all required questions are answered
+  const answeredIds = new Set(body.responses.map((r) => r.questionId));
+  const requiredQuestions = poll.questions.filter((q: { required: boolean }) => q.required);
+
+  for (const q of requiredQuestions) {
+    if (!answeredIds.has(q.id)) {
+      return c.json(
+        {
+          error: `Missing answer for required question: ${q.id}`,
+          code: "MISSING_ANSWER",
+        },
+        400
+      );
+    }
+  }
+
+  // Record response in database
+  const response = await recordResponse({
+    pollId,
+    agentWallet: user.walletAddress,
+    responses: body.responses,
+    confidenceScores: body.confidenceScores ?? null,
+    attestationHash: body.attestationHash,
+    onChainTxHash: txHash ?? null,
+  });
+
+  // Calculate payout estimate
+  const responseCount = await getResponseCount(pollId);
+  const payoutEstimate = (parseFloat(poll.cashPoolUsdc) * 0.9) / poll.participantCap;
+
+  return c.json(
+    {
+      id: response.id,
+      pollId: response.pollId,
+      submittedAt: response.submittedAt.toISOString(),
+      txHash: response.onChainTxHash,
+      payoutEstimate: payoutEstimate.toFixed(6),
+      participantNumber: responseCount,
+      message: txHash
+        ? "Response submitted and confirmed on-chain"
+        : "Response recorded. Submit on-chain to confirm.",
+    },
+    201
+  );
+});
+
+/**
+ * GET /agent/claimable
+ * Get all pending claims for the authenticated agent
+ * Returns polls where agent can claim their payout
+ */
+agents.get("/claimable", requireAuth, async (c) => {
+  const user = getUser(c);
+
+  const claimablePayouts = await getClaimablePayouts(user.walletAddress);
+
+  const totalClaimable = claimablePayouts.reduce(
+    (sum, p) => sum + parseFloat(p.amountUsdc),
+    0
+  );
+
+  return c.json({
+    claimable: claimablePayouts,
+    totalClaimableUsdc: totalClaimable.toFixed(6),
+    count: claimablePayouts.length,
+    message: claimablePayouts.length > 0
+      ? "Call claimPayout() on the contract for each poll. Agent pays gas."
+      : "No pending claims",
+  });
+});
+
+/**
+ * POST /agent/polls/:id/confirm-claim
+ * Confirm that agent has claimed their payout on-chain
+ * Agent provides txHash after calling claimPayout() on-chain
+ */
+agents.post("/polls/:id/confirm-claim", requireAuth, async (c) => {
+  const user = getUser(c);
+  const pollId = c.req.param("id");
+
+  // Get txHash from request body
+  const body = await c.req.json().catch(() => ({}));
+  const txHash = body.txHash as string | undefined;
+
+  if (!txHash) {
+    return c.json(
+      {
+        error: "txHash is required",
+        code: "MISSING_TX_HASH",
+      },
+      400
+    );
+  }
+
+  // Check if payout exists for this agent and poll
+  const payout = await getPayoutForAgent(pollId, user.walletAddress);
+
+  if (!payout) {
+    return c.json(
+      {
+        error: "No payout found for this poll",
+        code: "PAYOUT_NOT_FOUND",
+      },
+      404
+    );
+  }
+
+  if (payout.status === "confirmed") {
+    return c.json(
+      {
+        error: "Payout already claimed",
+        code: "ALREADY_CLAIMED",
+      },
+      400
+    );
+  }
+
+  // Update payout as claimed
+  const updated = await updatePayoutAsClaimed(payout.id, txHash);
+
+  return c.json({
+    id: updated.id,
+    pollId: updated.pollId,
+    amountUsdc: updated.amountUsdc,
+    txHash: updated.txHash,
+    claimedAt: updated.claimedAt?.toISOString(),
+    message: "Payout claim confirmed",
   });
 });
 

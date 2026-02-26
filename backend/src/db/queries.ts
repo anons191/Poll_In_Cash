@@ -590,3 +590,127 @@ export async function getPublicRecentPayouts(limit = 10) {
     timestamp: payout.distributedAt?.toISOString() ?? new Date().toISOString(),
   }));
 }
+
+// ============ Claim-Based Model Queries ============
+
+/**
+ * Get a specific poll response by poll ID and agent wallet
+ */
+export async function getAgentResponse(pollId: string, agentWallet: string) {
+  return db.query.pollResponses.findFirst({
+    where: and(
+      eq(pollResponses.pollId, pollId),
+      eq(pollResponses.agentWallet, agentWallet.toLowerCase())
+    ),
+    with: { poll: true },
+  });
+}
+
+/**
+ * Update a poll response with on-chain transaction hash
+ * Called when agent confirms their on-chain submission
+ */
+export async function updateResponseTxHash(responseId: string, txHash: string) {
+  const [updated] = await db
+    .update(pollResponses)
+    .set({ onChainTxHash: txHash })
+    .where(eq(pollResponses.id, responseId))
+    .returning();
+  return updated;
+}
+
+/**
+ * Create pending payout records for all participants when poll is finalized
+ * @param pollId - Database poll ID
+ * @param payoutPerPerson - Amount each participant will receive
+ * @param claimDeadline - 90 days from poll finalization
+ */
+export async function createPendingPayouts(
+  pollId: string,
+  payoutPerPerson: string,
+  claimDeadline: Date
+) {
+  // Get all responses for this poll
+  const responses = await getResponsesByPoll(pollId);
+
+  if (responses.length === 0) return [];
+
+  const payoutRecords = responses.map((response) => ({
+    pollId,
+    recipientWallet: response.agentWallet,
+    amountUsdc: payoutPerPerson,
+    status: "pending" as const,
+    claimDeadline,
+  }));
+
+  return db.insert(payouts).values(payoutRecords).returning();
+}
+
+/**
+ * Get all claimable (pending) payouts for an agent
+ * Returns payouts that can still be claimed (before deadline)
+ */
+export async function getClaimablePayouts(walletAddress: string) {
+  const claimablePayouts = await db
+    .select({
+      id: payouts.id,
+      pollId: payouts.pollId,
+      amountUsdc: payouts.amountUsdc,
+      claimDeadline: payouts.claimDeadline,
+      pollTitle: polls.title,
+      contractPollId: polls.contractPollId,
+    })
+    .from(payouts)
+    .leftJoin(polls, eq(payouts.pollId, polls.id))
+    .where(
+      and(
+        eq(payouts.recipientWallet, walletAddress.toLowerCase()),
+        eq(payouts.status, "pending"),
+        sql`${payouts.claimDeadline} > NOW()`
+      )
+    )
+    .orderBy(desc(payouts.claimDeadline));
+
+  return claimablePayouts.map((payout) => ({
+    id: payout.id,
+    pollId: payout.pollId,
+    pollTitle: payout.pollTitle ?? "Unknown Poll",
+    contractPollId: payout.contractPollId,
+    amountUsdc: payout.amountUsdc,
+    claimDeadline: payout.claimDeadline?.toISOString() ?? null,
+    daysRemaining: payout.claimDeadline
+      ? Math.ceil((payout.claimDeadline.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+      : 0,
+  }));
+}
+
+/**
+ * Update a payout as claimed by the agent
+ * @param payoutId - Payout record ID
+ * @param txHash - On-chain claim transaction hash
+ */
+export async function updatePayoutAsClaimed(payoutId: string, txHash: string) {
+  const [updated] = await db
+    .update(payouts)
+    .set({
+      status: "confirmed",
+      txHash,
+      claimedAt: new Date(),
+    })
+    .where(eq(payouts.id, payoutId))
+    .returning();
+  return updated;
+}
+
+/**
+ * Get payout for a specific poll and wallet
+ */
+export async function getPayoutForAgent(pollId: string, walletAddress: string) {
+  return db.query.payouts.findFirst({
+    where: and(
+      eq(payouts.pollId, pollId),
+      eq(payouts.recipientWallet, walletAddress.toLowerCase())
+    ),
+    with: { poll: true },
+  });
+}
