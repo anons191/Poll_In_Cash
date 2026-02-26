@@ -37,3 +37,8 @@ coverage
 
 # Drizzle migration snapshots (contain local state)
 drizzle/meta/
+
+# Claude debug/session notes (internal use only)
+ATTESTATION_DEBUG_NOTES.md
+*_DEBUG_NOTES.md
+CLAUDE_*.md
