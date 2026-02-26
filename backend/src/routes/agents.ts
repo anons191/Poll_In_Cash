@@ -583,6 +583,96 @@ agents.get("/polls/:id/attestation", requireAuth, async (c) => {
 });
 
 /**
+ * GET /agent/polls/:id/attestation-debug
+ * Get attestation signature with full debug info for agents who already responded
+ * Use this to troubleshoot on-chain submission failures
+ */
+agents.get("/polls/:id/attestation-debug", requireAuth, async (c) => {
+  const user = getUser(c);
+  const pollId = c.req.param("id");
+
+  const poll = await getPollById(pollId);
+
+  if (!poll) {
+    return c.json({ error: "Poll not found", code: "POLL_NOT_FOUND" }, 404);
+  }
+
+  if (poll.contractPollId === null) {
+    return c.json(
+      {
+        error: "Poll has not been funded on-chain yet",
+        code: "NOT_FUNDED",
+      },
+      400
+    );
+  }
+
+  // Get wallet in proper format
+  const participantWallet = toWalletAddress(user.walletAddress);
+  if (!participantWallet) {
+    return c.json(
+      {
+        error: "Invalid wallet address",
+        code: "INVALID_WALLET",
+      },
+      400
+    );
+  }
+
+  // Import chain config to show contract address
+  const { POLLPOOL_ADDRESS } = await import("../config/chain.js");
+
+  // Create attestation signature
+  let attestationSignature: `0x${string}`;
+  try {
+    attestationSignature = await createAttestationSignature(
+      BigInt(poll.contractPollId),
+      participantWallet
+    );
+  } catch (error) {
+    console.error("Failed to create attestation signature:", error);
+    return c.json(
+      {
+        error: "Failed to create attestation signature",
+        code: "ATTESTATION_ERROR",
+        details: String(error),
+      },
+      500
+    );
+  }
+
+  // Get existing response if any
+  const existingResponse = await getAgentResponse(pollId, user.walletAddress);
+
+  return c.json({
+    debug: {
+      message: "Use these values to call submitResponse() on-chain",
+      contractAddress: POLLPOOL_ADDRESS,
+      contractPollId: poll.contractPollId,
+      participantWallet: participantWallet,
+      participantWalletLowercase: participantWallet.toLowerCase(),
+      attestationSignature,
+      signatureLength: attestationSignature.length,
+    },
+    onChainCall: {
+      contract: POLLPOOL_ADDRESS,
+      function: "submitResponse(uint256 _pollId, bytes _attestationSignature)",
+      args: {
+        _pollId: poll.contractPollId,
+        _attestationSignature: attestationSignature,
+      },
+      callerMustBe: participantWallet,
+    },
+    existingResponse: existingResponse ? {
+      id: existingResponse.id,
+      submittedAt: existingResponse.submittedAt.toISOString(),
+      onChainTxHash: existingResponse.onChainTxHash,
+    } : null,
+    warning: "The caller (msg.sender) MUST be the same wallet that authenticated to this API. The signature is bound to this specific wallet address.",
+  });
+});
+
+/**
  * POST /agent/polls/:id/confirm-response
  * Confirm on-chain response submission
  * Agent provides txHash after calling submitResponse() on-chain
